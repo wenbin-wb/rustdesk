@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "entry_desc",
+      "value": "RustDesk Remote Desktop"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "RustDesk Remote Desktop Entry"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "RustDesk"
+    }
+  ]
+}

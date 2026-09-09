@@ -1,0 +1,12 @@
+{
+  "hvigorVersion": "latest",
+  "dependencies": {
+    "@ohos/hvigor-ohos-plugin": "latest"
+  },
+  "execution": {
+    "daemon": true
+  },
+  "logging": {
+    "level": "info"
+  }
+}

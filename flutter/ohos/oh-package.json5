@@ -1,0 +1,9 @@
+{
+  "name": "rustdesk_ohos",
+  "version": "1.5.0",
+  "description": "RustDesk Remote Desktop for HarmonyOS NEXT",
+  "main": "",
+  "author": "Purslane Tech Pte. Ltd.",
+  "license": "GPL-3.0",
+  "dependencies": {}
+}

@@ -16,3 +16,12 @@ rustflags = [
 #]
 [net]
 git-fetch-with-cli = true
+
+[target.aarch64-unknown-linux-ohos]
+linker = "D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm/bin/clang.exe"
+ar = "D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm/bin/llvm-ar.exe"
+rustflags = [
+    "-C", "link-arg=--target=aarch64-linux-ohos",
+    "-C", "link-arg=--sysroot=D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/sysroot",
+    "-C", "link-arg=-D__MUSL__",
+]

@@ -134,7 +134,7 @@ class PlatformFFI {
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
-    final dylib = isAndroid
+    final dylib = (isAndroid || isOHOS)
         ? DynamicLibrary.open('librustdesk.so')
         : isLinux
             ? _openLinuxCoreLib()
@@ -179,6 +179,8 @@ class PlatformFFI {
           // which provided the `downloads` path in the sandbox.
           // It is unclear why we now use the `data` directory in the sandbox instead.
           _homeDir = _ffiBind.mainGetDataDirIos(appDir: _dir);
+        } else if (isOHOS) {
+          _homeDir = _dir;
         } else {
           // no need to set home dir
         }
@@ -197,6 +199,9 @@ class PlatformFFI {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
+      } else if (isOHOS) {
+        name = 'HarmonyOS';
+        id = 'OHOS';
       } else if (isLinux) {
         LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
         name = linuxInfo.name;
@@ -218,7 +223,7 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
       }
-      if (isAndroid || isIOS) {
+      if (isAndroid || isIOS || isOHOS) {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       } else {

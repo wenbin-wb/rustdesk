@@ -52,6 +52,7 @@ final navigationBarKey = GlobalKey();
 
 final isAndroid = isAndroid_;
 final isIOS = isIOS_;
+final isOHOS = isOHOS_;
 final isWindows = isWindows_;
 final isMacOS = isMacOS_;
 final isLinux = isLinux_;
@@ -61,7 +62,7 @@ final isWebDesktop = isWebDesktop_;
 final isWebOnWindows = isWebOnWindows_;
 final isWebOnLinux = isWebOnLinux_;
 final isWebOnMacOs = isWebOnMacOS_;
-var isMobile = isAndroid || isIOS;
+var isMobile = isAndroid || isIOS || isOHOS;
 var version = '';
 int androidVersion = 0;
 
