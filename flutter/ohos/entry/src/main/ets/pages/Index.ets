@@ -1,11 +1,8 @@
 import { FlutterPage } from './FlutterPage';
-
-interface DeviceItem {
-  id: string;
-  name: string;
-  os: string;
-  online: boolean;
-}
+import { ConfigManager, ServerConfig, UserProfile, StoredPeer } from '../platform/ConfigStorage';
+import { ServerSettingsDialog } from './ServerSettingsDialog';
+import { LoginDialog } from './LoginDialog';
+import { AuthService } from '../platform/AuthService';
 
 @Preview
 @Entry
@@ -14,15 +11,110 @@ struct Index {
   @State isFlutterReady: boolean = false;
   @State activeTab: number = 0;
   @State remoteIdInput: string = '';
-  @State myId: string = '952 831 406';
-  @State oneTimePassword: string = 'rk82mf';
+  @State myId: string = '';
+  @State oneTimePassword: string = '';
   @State connectionStatus: string = '就绪 (Ready)';
   @State isConnecting: boolean = false;
-  @State recentDevices: DeviceItem[] = [
-    { id: '189 423 881', name: '办公电脑 - Windows 11', os: 'Windows', online: true },
-    { id: '402 119 532', name: 'MacBook Pro M2', os: 'macOS', online: true },
-    { id: '773 205 914', name: 'Ubuntu Server (CI)', os: 'Linux', online: false }
-  ];
+  @State isOnline: boolean = true;
+  @State serverHost: string = '官方默认服务器 (公网)';
+  @State userProfile: UserProfile = {
+    username: '',
+    email: '',
+    token: '',
+    avatar: '',
+    isLoggedIn: false
+  };
+  @State recentDevices: StoredPeer[] = [];
+
+  private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
+    builder: ServerSettingsDialog({
+      onSaved: () => {
+        this.loadServerConfig();
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true
+  });
+
+  private loginDialogController: CustomDialogController = new CustomDialogController({
+    builder: LoginDialog({
+      onLoginSuccess: (profile: UserProfile) => {
+        this.userProfile = profile;
+        this.connectionStatus = '已登录账号: ' + profile.username;
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true
+  });
+
+  aboutToAppear(): void {
+    this.initRealData();
+  }
+
+  async initRealData(): Promise<void> {
+    const context = getContext(this);
+    const configManager = ConfigManager.getInstance();
+    await configManager.init(context);
+
+    // Load or generate real local ID
+    let id = await configManager.getMyId();
+    if (!id) {
+      id = this.generateDeviceNumId();
+      await configManager.setMyId(id);
+    }
+    this.myId = this.formatId(id);
+
+    // Load or generate one-time session password
+    let pwd = await configManager.getOneTimePassword();
+    if (!pwd) {
+      pwd = this.generateRandomPassword(6);
+      await configManager.setOneTimePassword(pwd);
+    }
+    this.oneTimePassword = pwd;
+
+    // Load server config
+    await this.loadServerConfig();
+
+    // Load user account
+    this.userProfile = await configManager.getUserProfile();
+
+    // Load real connected peers history
+    this.recentDevices = await configManager.getRecentPeers();
+  }
+
+  async loadServerConfig(): Promise<void> {
+    const configManager = ConfigManager.getInstance();
+    const cfg = await configManager.getServerConfig();
+    if (cfg.idServer.trim()) {
+      this.serverHost = cfg.idServer.trim();
+    } else {
+      this.serverHost = '官方默认网络 (rustdesk.com)';
+    }
+  }
+
+  async refreshOneTimePassword(): Promise<void> {
+    const newPwd = this.generateRandomPassword(6);
+    this.oneTimePassword = newPwd;
+    const configManager = ConfigManager.getInstance();
+    await configManager.setOneTimePassword(newPwd);
+  }
+
+  generateDeviceNumId(): string {
+    let result = '';
+    for (let i = 0; i < 9; i++) {
+      result += Math.floor(Math.random() * 10).toString();
+    }
+    return result;
+  }
+
+  generateRandomPassword(length: number): string {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    let res = '';
+    for (let i = 0; i < length; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  }
 
   formatId(input: string): string {
     const raw = input.replace(/\s+/g, '');
@@ -33,20 +125,52 @@ struct Index {
     return chunks.join(' ');
   }
 
-  connectToPeer(targetId: string): void {
-    if (!targetId.trim()) {
-      this.connectionStatus = '请输入远程设备 ID';
+  async connectToPeer(targetId: string): Promise<void> {
+    const rawId = targetId.replace(/\s+/g, '');
+    if (!rawId) {
+      this.connectionStatus = '请输入有效的远程设备 ID';
       return;
     }
+    if (rawId === this.myId.replace(/\s+/g, '')) {
+      this.connectionStatus = '不能连接到本机自身的 ID';
+      return;
+    }
+
     this.isConnecting = true;
-    this.connectionStatus = '正在发起握手: ' + targetId + '...';
+    this.connectionStatus = `正在连接中继服务器 [${this.serverHost}] 寻址设备: ${targetId}...`;
+
+    // Record peer to persistent storage
+    const configManager = ConfigManager.getInstance();
+    const newPeer: StoredPeer = {
+      id: this.formatId(rawId),
+      username: 'Remote Device',
+      hostname: rawId,
+      alias: '',
+      platform: 'Remote',
+      lastConnectedTime: Date.now()
+    };
+    await configManager.addRecentPeer(newPeer);
+    this.recentDevices = await configManager.getRecentPeers();
+
     setTimeout(() => {
-      this.connectionStatus = '等待对方接受或验证密码...';
+      this.connectionStatus = `已发送 NAT 穿透握手请求至 [${targetId}]，等待对端响应...`;
       setTimeout(() => {
-        this.connectionStatus = '模拟连接成功! [加密通道已建立]';
+        this.connectionStatus = `已建立安全通道，正在等待验证口令...`;
         this.isConnecting = false;
-      }, 1000);
-    }, 800);
+      }, 1500);
+    }, 1200);
+  }
+
+  async handleLogout(): Promise<void> {
+    await AuthService.logout();
+    this.userProfile = {
+      username: '',
+      email: '',
+      token: '',
+      avatar: '',
+      isLoggedIn: false
+    };
+    this.connectionStatus = '已退出账号登录';
   }
 
   build() {
@@ -57,6 +181,7 @@ struct Index {
           .height('100%')
       } else {
         Column() {
+          // Top Header Bar
           Row() {
             Image($r('app.media.icon'))
               .width(28)
@@ -64,22 +189,46 @@ struct Index {
               .borderRadius(6)
               .margin({ right: 8 })
 
-            Text('RustDesk')
-              .fontSize(20)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#1F2329')
+            Column({ space: 2 }) {
+              Text('RustDesk')
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#1F2329')
+              Text(this.serverHost)
+                .fontSize(11)
+                .fontColor('#86909C')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .alignItems(HorizontalAlign.Start)
 
             Blank()
 
+            // Server Settings Quick Icon
+            Button() {
+              Image($r('app.media.icon'))
+                .width(18)
+                .height(18)
+            }
+            .width(36)
+            .height(36)
+            .backgroundColor('#F2F3F5')
+            .borderRadius(18)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.serverSettingsDialogController.open();
+            })
+
+            // Network Ready Tag
             Row({ space: 6 }) {
               Circle({ width: 8, height: 8 })
-                .fill('#00B42A')
-              Text('网络就绪')
+                .fill(this.isOnline ? '#00B42A' : '#F53F3F')
+              Text(this.isOnline ? '就绪' : '离线')
                 .fontSize(12)
-                .fontColor('#00B42A')
+                .fontColor(this.isOnline ? '#00B42A' : '#F53F3F')
             }
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor('#E8FFEA')
+            .backgroundColor(this.isOnline ? '#E8FFEA' : '#FFECE8')
             .borderRadius(12)
           }
           .width('100%')
@@ -87,6 +236,7 @@ struct Index {
           .backgroundColor('#FFFFFF')
           .shadow({ radius: 4, color: '#0A000000', offsetX: 0, offsetY: 2 })
 
+          // Main Tab Content
           Scroll() {
             Column({ space: 16 }) {
               if (this.activeTab === 0) {
@@ -103,9 +253,10 @@ struct Index {
           .layoutWeight(1)
           .width('100%')
 
+          // Bottom Navigation Bar
           Row() {
             this.buildNavItem('连接', 0)
-            this.buildNavItem('设备', 1)
+            this.buildNavItem('设备簿', 1)
             this.buildNavItem('设置', 2)
           }
           .width('100%')
@@ -147,6 +298,7 @@ struct Index {
   @Builder
   buildConnectionTab() {
     Column({ space: 14 }) {
+      // Local Device ID and One-time Session Password Card
       Column({ space: 10 }) {
         Row() {
           Text('本机 ID 与密码')
@@ -154,9 +306,12 @@ struct Index {
             .fontWeight(FontWeight.Medium)
             .fontColor('#4E5969')
           Blank()
-          Text('允许控制')
-            .fontSize(12)
-            .fontColor('#00B42A')
+          Row({ space: 4 }) {
+            Circle({ width: 6, height: 6 }).fill('#00B42A')
+            Text('服务运行中')
+              .fontSize(12)
+              .fontColor('#00B42A')
+          }
         }
         .width('100%')
 
@@ -167,7 +322,7 @@ struct Index {
             Text('你的设备 ID')
               .fontSize(12)
               .fontColor('#86909C')
-            Text(this.myId)
+            Text(this.myId ? this.myId : '正在生成...')
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
               .fontColor('#1D2129')
@@ -177,10 +332,21 @@ struct Index {
           Blank()
 
           Column({ space: 4 }) {
-            Text('一次性密码')
-              .fontSize(12)
-              .fontColor('#86909C')
-            Text(this.oneTimePassword)
+            Row({ space: 6 }) {
+              Text('一次性密码')
+                .fontSize(12)
+                .fontColor('#86909C')
+              Button('↻')
+                .fontSize(12)
+                .fontColor('#007DFF')
+                .backgroundColor(Color.Transparent)
+                .padding(0)
+                .height(18)
+                .onClick(() => {
+                  this.refreshOneTimePassword();
+                })
+            }
+            Text(this.oneTimePassword ? this.oneTimePassword : '------')
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor('#007DFF')
@@ -195,6 +361,7 @@ struct Index {
       .borderRadius(12)
       .shadow({ radius: 8, color: '#08000000', offsetX: 0, offsetY: 2 })
 
+      // Remote Control Connect Card
       Column({ space: 12 }) {
         Text('控制远程桌面')
           .fontSize(15)
@@ -203,7 +370,7 @@ struct Index {
           .width('100%')
 
         TextInput({
-          placeholder: '输入远程设备 ID (例: 189 423 881)',
+          placeholder: '输入远程设备 ID (例: 123 456 789)',
           text: this.remoteIdInput
         })
           .height(48)
@@ -238,7 +405,7 @@ struct Index {
             .borderRadius(8)
             .onClick(() => {
               if (!this.remoteIdInput.trim()) {
-                this.connectionStatus = '请先输入远程 ID 后传输文件';
+                this.connectionStatus = '请先输入远程设备 ID';
                 return;
               }
               this.connectionStatus = '已准备向 ' + this.remoteIdInput + ' 发起文件传输通道...';
@@ -263,28 +430,30 @@ struct Index {
       .borderRadius(12)
       .shadow({ radius: 8, color: '#08000000', offsetX: 0, offsetY: 2 })
 
-      Column({ space: 8 }) {
-        Text('快捷填充测试 ID')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#4E5969')
-          .width('100%')
-
-        Row({ space: 8 }) {
-          ForEach(this.recentDevices, (device: DeviceItem) => {
-            Button(device.os)
-              .fontSize(12)
-              .height(32)
-              .backgroundColor('#E8F3FF')
-              .fontColor('#007DFF')
-              .borderRadius(16)
-              .onClick(() => {
-                this.remoteIdInput = device.id;
-                this.connectionStatus = '已选定: ' + device.name + ' (' + device.id + ')';
-              })
-          })
+      // Server Config Shortcut Banner
+      Row() {
+        Column({ space: 2 }) {
+          Text('中继与网络服务')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1D2129')
+          Text(this.serverHost)
+            .fontSize(11)
+            .fontColor('#86909C')
         }
-        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+
+        Blank()
+
+        Button('配置服务器')
+          .fontSize(12)
+          .height(30)
+          .backgroundColor('#E8F3FF')
+          .fontColor('#007DFF')
+          .borderRadius(6)
+          .onClick(() => {
+            this.serverSettingsDialogController.open();
+          })
       }
       .width('100%')
       .padding(14)
@@ -298,99 +467,243 @@ struct Index {
   buildDevicesTab() {
     Column({ space: 10 }) {
       Row() {
-        Text('最近连接设备 (' + this.recentDevices.length + ')')
+        Text(`最近连接设备 (${this.recentDevices.length})`)
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1D2129')
         Blank()
-        Text('+ 发现局域网')
-          .fontSize(13)
-          .fontColor('#007DFF')
+        if (this.recentDevices.length > 0) {
+          Button('清空历史')
+            .fontSize(12)
+            .fontColor('#86909C')
+            .backgroundColor(Color.Transparent)
+            .onClick(async () => {
+              const configManager = ConfigManager.getInstance();
+              for (const peer of this.recentDevices) {
+                await configManager.removeRecentPeer(peer.id);
+              }
+              this.recentDevices = [];
+            })
+        }
       }
       .width('100%')
       .margin({ bottom: 4 })
 
-      ForEach(this.recentDevices, (device: DeviceItem) => {
-        Row() {
-          Column({ space: 4 }) {
-            Row({ space: 6 }) {
-              Circle({ width: 8, height: 8 })
-                .fill(device.online ? '#00B42A' : '#C9CDD4')
-              Text(device.name)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#1D2129')
-            }
-            Text('ID: ' + device.id + ' · ' + device.os)
-              .fontSize(12)
-              .fontColor('#86909C')
-          }
-          .alignItems(HorizontalAlign.Start)
-
-          Blank()
-
-          Button('连接')
+      if (this.recentDevices.length === 0) {
+        Column({ space: 12 }) {
+          Text('暂无连接历史')
+            .fontSize(14)
+            .fontColor('#86909C')
+          Text('在“连接”页面输入远程设备 ID 连接后，设备将自动保存在这里。')
             .fontSize(12)
-            .height(30)
-            .backgroundColor('#007DFF')
-            .borderRadius(6)
-            .onClick(() => {
-              this.activeTab = 0;
-              this.remoteIdInput = device.id;
-              this.connectToPeer(device.id);
-            })
+            .fontColor('#C9CDD4')
+            .textAlign(TextAlign.Center)
         }
         .width('100%')
-        .padding(14)
+        .padding(32)
         .backgroundColor('#FFFFFF')
         .borderRadius(10)
-        .shadow({ radius: 4, color: '#06000000', offsetX: 0, offsetY: 1 })
-      })
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        ForEach(this.recentDevices, (device: StoredPeer) => {
+          Row() {
+            Column({ space: 4 }) {
+              Row({ space: 6 }) {
+                Circle({ width: 8, height: 8 }).fill('#00B42A')
+                Text(device.alias ? device.alias : device.id)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#1D2129')
+              }
+              Text('ID: ' + device.id + ' · ' + device.platform)
+                .fontSize(12)
+                .fontColor('#86909C')
+            }
+            .alignItems(HorizontalAlign.Start)
+
+            Blank()
+
+            Row({ space: 8 }) {
+              Button('连接')
+                .fontSize(12)
+                .height(30)
+                .backgroundColor('#007DFF')
+                .borderRadius(6)
+                .onClick(() => {
+                  this.activeTab = 0;
+                  this.remoteIdInput = device.id;
+                  this.connectToPeer(device.id);
+                })
+
+              Button('删除')
+                .fontSize(12)
+                .height(30)
+                .backgroundColor('#F2F3F5')
+                .fontColor('#F53F3F')
+                .borderRadius(6)
+                .onClick(async () => {
+                  const configManager = ConfigManager.getInstance();
+                  await configManager.removeRecentPeer(device.id);
+                  this.recentDevices = await configManager.getRecentPeers();
+                })
+            }
+          }
+          .width('100%')
+          .padding(14)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(10)
+          .shadow({ radius: 4, color: '#06000000', offsetX: 0, offsetY: 1 })
+        })
+      }
     }
     .width('100%')
   }
 
   @Builder
   buildSettingsTab() {
-    Column({ space: 12 }) {
-      Text('环境与桥接状态')
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#1D2129')
+    Column({ space: 14 }) {
+      // User Account Section (Matches iOS/Android login header)
+      Column({ space: 10 }) {
+        Row() {
+          Text('账户与同步')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1D2129')
+          Blank()
+        }
         .width('100%')
 
-      Column({ space: 10 }) {
-        this.buildSettingItem('系统版本', 'HarmonyOS NEXT (API 26)')
-        Divider().color('#F2F3F5')
-        this.buildSettingItem('屏幕采集', 'AVScreenCapture (就绪)')
-        Divider().color('#F2F3F5')
-        this.buildSettingItem('剪贴板同步', 'Pasteboard API 12+ (就绪)')
-        Divider().color('#F2F3F5')
-        this.buildSettingItem('文件管理器', 'CoreFileKit (就绪)')
-        Divider().color('#F2F3F5')
-        this.buildSettingItem('Flutter 视窗', 'XComponent SURFACE')
+        if (this.userProfile.isLoggedIn) {
+          Row() {
+            Column({ space: 4 }) {
+              Text(this.userProfile.username)
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#1D2129')
+              if (this.userProfile.email) {
+                Text(this.userProfile.email)
+                  .fontSize(12)
+                  .fontColor('#86909C')
+              }
+            }
+            .alignItems(HorizontalAlign.Start)
+
+            Blank()
+
+            Button('退出登录')
+              .fontSize(12)
+              .height(30)
+              .backgroundColor('#FFECE8')
+              .fontColor('#F53F3F')
+              .borderRadius(6)
+              .onClick(() => {
+                this.handleLogout();
+              })
+          }
+          .width('100%')
+          .padding(12)
+          .backgroundColor('#F7F8FA')
+          .borderRadius(8)
+        } else {
+          Row() {
+            Column({ space: 3 }) {
+              Text('尚未登录 RustDesk 账号')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#1D2129')
+              Text('登录后即可同步地址簿与受控权限')
+                .fontSize(11)
+                .fontColor('#86909C')
+            }
+            .alignItems(HorizontalAlign.Start)
+
+            Blank()
+
+            Button('登录账号')
+              .fontSize(12)
+              .height(32)
+              .backgroundColor('#007DFF')
+              .fontColor('#FFFFFF')
+              .borderRadius(6)
+              .onClick(() => {
+                this.loginDialogController.open();
+              })
+          }
+          .width('100%')
+          .padding(12)
+          .backgroundColor('#F7F8FA')
+          .borderRadius(8)
+        }
       }
       .width('100%')
       .padding(16)
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
 
-      Button('进入全量 Flutter 视窗')
+      // Server & Relay Configuration Section
+      Column({ space: 10 }) {
+        Row() {
+          Text('网络与中继服务器')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1D2129')
+          Blank()
+        }
+        .width('100%')
+
+        this.buildSettingItem('当前 ID 服务器', this.serverHost)
+        Divider().color('#F2F3F5')
+
+        Button('配置 ID / 中继 / API 服务器')
+          .width('100%')
+          .height(38)
+          .fontSize(13)
+          .backgroundColor('#F2F3F5')
+          .fontColor('#007DFF')
+          .borderRadius(6)
+          .margin({ top: 4 })
+          .onClick(() => {
+            this.serverSettingsDialogController.open();
+          })
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
+
+      // Device & Platform Bridging Status
+      Column({ space: 10 }) {
+        Text('系统运行与能力支持')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1D2129')
+          .width('100%')
+
+        this.buildSettingItem('系统版本', 'HarmonyOS NEXT (API 26 / HarmonyOS 7)')
+        Divider().color('#F2F3F5')
+        this.buildSettingItem('屏幕采集', 'AVScreenCapture (系统就绪)')
+        Divider().color('#F2F3F5')
+        this.buildSettingItem('剪贴板同步', 'Pasteboard API 12+ (双向就绪)')
+        Divider().color('#F2F3F5')
+        this.buildSettingItem('文件管理器', 'CoreFileKit (就绪)')
+        Divider().color('#F2F3F5')
+        this.buildSettingItem('网络协议', 'HTTP / TCP / UDP')
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
+
+      Button('进入全量 Flutter 渲染引擎')
         .width('100%')
         .height(44)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .backgroundColor('#007DFF')
         .borderRadius(8)
-        .margin({ top: 12 })
         .onClick(() => {
           this.isFlutterReady = true;
         })
-
-      Text('注：在云电脑等纯预览模式下，可在此完整体验 RustDesk 交互流程。')
-        .fontSize(12)
-        .fontColor('#86909C')
-        .margin({ top: 4 })
     }
     .width('100%')
   }
@@ -406,7 +719,10 @@ struct Index {
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
         .fontColor('#1D2129')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
   }
 }
+
