@@ -12,6 +12,10 @@
 
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
 import { HdsListItemCard } from '@kit.UIDesignKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskDevices';
 
 @Component
 export struct DevicesTab {
@@ -27,6 +31,15 @@ export struct DevicesTab {
 
   onConnect: (targetId: string) => void = () => {};
 
+  /**
+   * Tells the page the stored peer list changed, so it can refresh the other tab.
+   *
+   * This tab reloads itself after a delete, but the recent list on the remote tab is a second
+   * view of the same store and has no way to know. Without this, a device deleted here stays
+   * visible there.
+   */
+  onPeersMutated: () => void = () => {};
+
   aboutToAppear(): void {
     this.reload();
   }
@@ -38,6 +51,8 @@ export struct DevicesTab {
   private reload(): void {
     ConfigManager.getInstance().getRecentPeers().then((peers: StoredPeer[]) => {
       this.devices = peers;
+    }).catch((e: Object) => {
+      hilog.warn(DOMAIN, TAG, 'could not load stored peers: %{public}s', JSON.stringify(e));
     });
   }
 
@@ -47,6 +62,7 @@ export struct DevicesTab {
       return config.removePeerPassword(device.id);
     }).then(() => {
       this.reload();
+      this.onPeersMutated();
     });
   }
 
@@ -59,6 +75,7 @@ export struct DevicesTab {
     });
     Promise.all(work).then(() => {
       this.reload();
+      this.onPeersMutated();
     });
   }
 

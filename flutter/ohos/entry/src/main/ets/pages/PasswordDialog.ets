@@ -21,6 +21,22 @@ export struct PasswordDialog {
   onVerify?: (password: string, remember: boolean) => void;
 
   onTargetChanged(): void {
+    this.reset();
+  }
+
+  /**
+   * Clear the fields every time the dialog is shown.
+   *
+   * @Watch only fires on a change, so reopening for the same peer -- which is the common case --
+   * would otherwise leave the previously typed password on screen and let a second tap
+   * resubmit it unnoticed. The instance is reused across opens, so this has to be reset
+   * explicitly rather than relying on construction defaults.
+   */
+  aboutToAppear(): void {
+    this.reset();
+  }
+
+  private reset(): void {
     this.passwordInput = '';
     this.errorMessage = '';
     this.rememberPassword = true;

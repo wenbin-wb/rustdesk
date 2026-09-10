@@ -9,7 +9,7 @@
 import { SectionCard } from './SectionCard';
 import { HdsListItemCard } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { getMyId, getTemporaryPassword } from '../platform/RustDeskBridge';
+import { getMyId, getTemporaryPassword, updateTemporaryPassword } from '../platform/RustDeskBridge';
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
 
 const DOMAIN = 0x0000;
@@ -212,9 +212,24 @@ export struct RemoteTab {
           Blank()
 
           Column({ space: 4 }) {
-            Text($r('app.string.home_one_time_password'))
-              .fontSize($r('app.float.font_caption'))
-              .fontColor($r('app.color.text_secondary'))
+            Row({ space: 6 }) {
+              Text($r('app.string.home_one_time_password'))
+                .fontSize($r('app.float.font_caption'))
+                .fontColor($r('app.color.text_secondary'))
+              // Rotating is a core operation; without this the password could only be read.
+              Button($r('app.string.home_refresh'))
+                .fontSize($r('app.float.font_caption'))
+                .height(22)
+                .padding({ left: 8, right: 8 })
+                .backgroundColor($r('app.color.bg_subtle'))
+                .fontColor($r('app.color.brand'))
+                .borderRadius($r('app.float.radius_pill'))
+                .onClick(() => {
+                  this.rotateOneTimePassword();
+                })
+            }
+            .alignItems(VerticalAlign.Center)
+
             Text(this.oneTimePassword.length > 0 ? this.oneTimePassword : '------')
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
@@ -225,6 +240,16 @@ export struct RemoteTab {
         .width('100%')
       }
       .width('100%')
+    }
+  }
+
+  /** Ask the core for a new one-time password and show it. */
+  private rotateOneTimePassword(): void {
+    try {
+      updateTemporaryPassword();
+      this.oneTimePassword = getTemporaryPassword();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'could not rotate the one-time password: %{public}s', JSON.stringify(e));
     }
   }
 

@@ -77,12 +77,22 @@ export class ConfigManager {
       return Promise.resolve();
     }
     if (!this.initPromise) {
-      this.initPromise = this.openStore(this.context).then((ok: boolean) => {
+      // Hold the attempt in a local as well as in the field: the field is cleared from inside
+      // the callback below, and a caller that returned the field after that happened would
+      // return null and await nothing.
+      const attempt = this.openStore(this.context).then((ok: boolean) => {
+        // Cleared either way, so `isInitialized && pref` stays the single source of truth for
+        // "the store is open". Leaving a resolved promise cached after success would mean that
+        // if anything ever cleared `pref` without clearing this, ensureInit would fail its
+        // first guard, hand back the stale resolved promise, and leave the store permanently
+        // wedged -- every read empty and every write dropped, with no retry.
+        this.initPromise = null;
         if (!ok) {
-          // Allow a later caller to try again.
-          this.initPromise = null;
+          hilog.warn(DOMAIN, TAG, 'settings store not open; a later access will retry');
         }
       });
+      this.initPromise = attempt;
+      return attempt;
     }
     return this.initPromise;
   }
@@ -107,10 +117,22 @@ export class ConfigManager {
     // its values are what the rest of the app reports. Preferences are only the UI's record.
     // Preferring the core here keeps the dialog showing the server actually in use rather
     // than a stale copy.
-    const coreId = getOption('custom-rendezvous-server').trim();
-    const coreRelay = getOption('relay-server').trim();
-    const coreApi = getOption('api-server').trim();
-    const coreKey = getOption('key').trim();
+    //
+    // These bridge reads are guarded because the caller is a startup path: a module that
+    // failed to load throws here, and the preference values below are still worth returning.
+    // An empty result means the core is on its built-in default, i.e. the public servers.
+    let coreId = '';
+    let coreRelay = '';
+    let coreApi = '';
+    let coreKey = '';
+    try {
+      coreId = getOption('custom-rendezvous-server').trim();
+      coreRelay = getOption('relay-server').trim();
+      coreApi = getOption('api-server').trim();
+      coreKey = getOption('key').trim();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'core options unavailable: %{public}s', JSON.stringify(e));
+    }
 
     if (!this.pref) {
       return {

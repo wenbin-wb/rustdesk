@@ -137,8 +137,16 @@ struct Index {
     this.stopObservingBreakpoint = observeBreakpoint(this.getUIContext(), (bp: Breakpoint) => {
       this.breakpoint = bp;
     });
-    this.loadServerConfig();
-    this.loadUserProfile();
+    // Both of these reach the native module, so neither may reject unhandled: a rejected
+    // promise from aboutToAppear takes the process down, and a module that failed to load is
+    // precisely the failure this app has hit before. Every other startup read is guarded the
+    // same way.
+    this.loadServerConfig().catch((e: Object) => {
+      hilog.warn(DOMAIN, TAG, 'server config unavailable: %{public}s', JSON.stringify(e));
+    });
+    this.loadUserProfile().catch((e: Object) => {
+      hilog.warn(DOMAIN, TAG, 'user profile unavailable: %{public}s', JSON.stringify(e));
+    });
   }
 
   aboutToDisappear(): void {
@@ -274,8 +282,8 @@ struct Index {
     // window no longer does for us. The background layer underneath still bleeds, so the page
     // reads as full screen while nothing sits under a system bar.
     .padding({
-      top: px2vp(this.statusBarInsetPx),
-      bottom: px2vp(this.navIndicatorInsetPx)
+      top: this.getUIContext().px2vp(this.statusBarInsetPx),
+      bottom: this.getUIContext().px2vp(this.navIndicatorInsetPx)
     })
   }
 
@@ -396,6 +404,10 @@ struct Index {
             peersRevision: this.peersRevision,
             onConnect: (targetId: string) => {
               this.beginConnect(targetId);
+            },
+            onPeersMutated: () => {
+              // Deleting here also changes what the remote tab's recent list should show.
+              this.peersRevision++;
             }
           })
         } else {
