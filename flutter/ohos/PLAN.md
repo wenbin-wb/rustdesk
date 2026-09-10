@@ -148,10 +148,21 @@
   - ⚠️ **关键坑（已修正并写入脚本注释）**：预编译 `.so` 必须放在**模块根 `entry/libs/<abi>/`**；放在 `entry/src/main/libs/<abi>/` 会**编译通过但被静默排除出 HAP**，导致"构建成功、真机加载失败"
 
 ### P3 · ArkUI 重写
-- [ ] 鸿蒙设计规范重写（系统 Tabs/List/Dialog/SettingItem）
-- [ ] i18n（资源化，对齐 `src/lang/*.rs` key）
-- [ ] 深色模式 / 无障碍 / safe area
-- [ ] 页面：首页 / 地址簿 / 设置 / 登录 / 服务器 / 远程会话
+- [x] **鸿蒙设计规范重写** ✅ 构建通过（`hvigorw assembleHap` → BUILD SUCCESSFUL，HAP 2.62 MB）
+  - **系统 `Tabs` 取代自绘 `LiquidTabBar`**（已删除）：同一个 `Tabs` 按断点切换 `vertical`/`barPosition` —— **手机=底栏，折叠屏展开/平板/2in1=侧栏**，一处组件覆盖全部形态，无 per-device 分支
+  - 断点自适应：`common/Breakpoint.ets` 基于 `mediaquery` 的 `sm/md/lg/xl`（600/840/1440vp），并派生侧栏判定、页边距、内容最大宽度；`aboutToAppear` 订阅、`aboutToDisappear` 退订（否则监听会让页面无法释放）
+  - 组件拆分：`components/SectionCard.ets`（统一卡片）+ `RemoteTab` / `DevicesTab` / `SettingsTab`
+  - **本机 ID 改从真实核心读取**（`getMyId()` 经 NAPI），**替换掉原先本地生成的假 9 位随机数**
+  - 设置页新增「核心版本 / 桥接版本 / 构建日期」行 —— 真机上可**一眼确认加载了哪个产物**（这是最省事的"原生模块是否装载"验证）
+- [x] **i18n 资源化** ✅ 中文为 base、英文 `en_US` 限定词；全部字面量（含 Tab/对话框/空态/错误提示）入 `string.json`
+- [x] **设计令牌 + 深色模式** ✅ `color.json`（base + `dark/` 限定词）与 `float.json`（字号/圆角/间距/最小热区）
+  - ⚠️ **坑**：`sys.float.ohos_id_text_size_*` 在本机 SDK 中**不可用**（`Unknown resource name`）。已改为**自建字号令牌** `app.float.font_*` —— 既避开不可核实的系统资源名，也更符合设计令牌原则
+- [x] **safe area** ✅ 页面 `expandSafeArea` 处理状态栏/手势条，内容自带内边距
+- [ ] 折叠屏铰链避让（悬停态 half-fold 分区）—— 需 `display.getFoldStatus()` + `WindowAvoidArea`，尚未实现
+- [ ] 无障碍细化：`accessibilityText`、焦点顺序、随系统字体缩放（当前字号用 `fp`，已可随缩放）
+- [x] 页面：首页 / 设备簿 / 设置（登录、服务器、密码对话框沿用既有实现并已资源化）
+
+> **说明**：`RemoteSessionPage.ets` / `ServerSettingsDialog.ets` / `ConfigStorage.ets` 携带**本次会话之前就存在的未提交改动**（上个 agent 遗留）。因 P3 构建依赖它们，随本次提交一并入库。
 
 ### P4 · 控制端核心链路
 - [ ] 真实连接/鉴权（rendezvous → relay/P2P → 会话）

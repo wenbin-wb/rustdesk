@@ -1,0 +1,90 @@
+{
+  "string": [
+    { "name": "entry_desc", "value": "RustDesk Remote Desktop" },
+    { "name": "EntryAbility_desc", "value": "RustDesk Remote Desktop Entry" },
+    { "name": "EntryAbility_label", "value": "RustDesk" },
+
+    { "name": "tab_remote", "value": "Remote" },
+    { "name": "tab_devices", "value": "Devices" },
+    { "name": "tab_settings", "value": "Settings" },
+
+    { "name": "status_ready", "value": "Ready" },
+    { "name": "status_offline", "value": "Offline" },
+    { "name": "status_service_running", "value": "Service running" },
+
+    { "name": "home_connect_title", "value": "Control remote device" },
+    { "name": "home_id_placeholder", "value": "Enter remote device ID" },
+    { "name": "home_connect", "value": "Connect" },
+    { "name": "home_transfer_file", "value": "Transfer file" },
+    { "name": "home_my_device_title", "value": "This device" },
+    { "name": "home_my_id", "value": "Device ID" },
+    { "name": "home_one_time_password", "value": "One-time password" },
+    { "name": "home_refresh", "value": "Refresh" },
+    { "name": "home_id_generating", "value": "Reading…" },
+    { "name": "home_public_relay", "value": "Public relay network" },
+    { "name": "home_server", "value": "Server" },
+
+    { "name": "peers_recent", "value": "Recent" },
+    { "name": "peers_lan", "value": "LAN" },
+    { "name": "peers_recent_empty", "value": "No recent devices" },
+    { "name": "peers_recent_empty_hint", "value": "Devices you connect to are listed here" },
+    { "name": "peers_lan_scanning", "value": "Scanning the local network…" },
+    { "name": "peers_lan_hint", "value": "Devices running RustDesk on the same network appear here" },
+    { "name": "peers_count", "value": "%d devices" },
+
+    { "name": "devices_title", "value": "Address book" },
+    { "name": "devices_empty", "value": "No saved devices" },
+    { "name": "devices_empty_hint", "value": "Devices you connect to are saved here" },
+    { "name": "devices_clear_all", "value": "Clear" },
+    { "name": "devices_connect", "value": "Connect" },
+    { "name": "devices_delete", "value": "Delete" },
+
+    { "name": "settings_account", "value": "Account" },
+    { "name": "settings_account_none", "value": "Not signed in" },
+    { "name": "settings_account_hint", "value": "Sign in to sync your address book" },
+    { "name": "settings_login", "value": "Sign in" },
+    { "name": "settings_logout", "value": "Sign out" },
+    { "name": "settings_server", "value": "Server and relay" },
+    { "name": "settings_server_configure", "value": "Configure relay / self-hosted server" },
+    { "name": "settings_server_current", "value": "Current server" },
+    { "name": "settings_system", "value": "System" },
+    { "name": "settings_core_version", "value": "Core version" },
+    { "name": "settings_bridge_version", "value": "Bridge version" },
+    { "name": "settings_arch", "value": "Architecture" },
+    { "name": "settings_arch_value", "value": "HarmonyOS (AArch64)" },
+
+    { "name": "dialog_login_title", "value": "Sign in to RustDesk" },
+    { "name": "dialog_login_hint", "value": "Sign in to sync your address book and access policy" },
+    { "name": "dialog_login_account", "value": "Account" },
+    { "name": "dialog_login_account_placeholder", "value": "Username or email" },
+    { "name": "dialog_login_password", "value": "Password" },
+    { "name": "dialog_login_password_placeholder", "value": "Account password" },
+    { "name": "dialog_login_submit", "value": "Sign in" },
+    { "name": "dialog_login_submitting", "value": "Signing in…" },
+
+    { "name": "dialog_password_title", "value": "Enter access password" },
+    { "name": "dialog_password_hint", "value": "Enter the remote device's password or one-time code" },
+    { "name": "dialog_password_placeholder", "value": "Remote password" },
+    { "name": "dialog_password_remember", "value": "Remember this password" },
+
+    { "name": "dialog_server_title", "value": "Server settings" },
+    { "name": "dialog_server_hint", "value": "Leave empty to use the public servers" },
+    { "name": "dialog_server_id", "value": "ID server" },
+    { "name": "dialog_server_relay", "value": "Relay server" },
+    { "name": "dialog_server_api", "value": "API server" },
+    { "name": "dialog_server_key", "value": "Public key" },
+    { "name": "dialog_server_reset", "value": "Reset" },
+    { "name": "dialog_server_save", "value": "Save" },
+
+    { "name": "session_connecting", "value": "Connecting…" },
+    { "name": "session_disconnect", "value": "Disconnect" },
+
+    { "name": "common_cancel", "value": "Cancel" },
+    { "name": "common_confirm", "value": "OK" },
+    { "name": "common_close", "value": "Close" },
+    { "name": "common_retry", "value": "Retry" },
+
+    { "name": "error_invalid_id", "value": "Enter a valid device ID" },
+    { "name": "error_self_id", "value": "Cannot connect to this device's own ID" }
+  ]
+}

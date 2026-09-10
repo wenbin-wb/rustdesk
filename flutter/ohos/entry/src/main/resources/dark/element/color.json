@@ -1,0 +1,32 @@
+{
+  "color": [
+    { "name": "start_window_background", "value": "#000000" },
+
+    { "name": "brand", "value": "#317AF7" },
+    { "name": "brand_pressed", "value": "#2760C7" },
+    { "name": "brand_disabled", "value": "#33317AF7" },
+    { "name": "on_brand", "value": "#FFFFFF" },
+
+    { "name": "bg_page", "value": "#000000" },
+    { "name": "bg_card", "value": "#1A1A1A" },
+    { "name": "bg_card_pressed", "value": "#262626" },
+    { "name": "bg_subtle", "value": "#262626" },
+
+    { "name": "text_title", "value": "#E5E5E5" },
+    { "name": "text_body", "value": "#E5E5E5" },
+    { "name": "text_secondary", "value": "#99FFFFFF" },
+    { "name": "text_hint", "value": "#66FFFFFF" },
+    { "name": "text_on_brand", "value": "#FFFFFF" },
+
+    { "name": "divider", "value": "#33FFFFFF" },
+    { "name": "border_subtle", "value": "#1AFFFFFF" },
+
+    { "name": "status_online", "value": "#64BB5C" },
+    { "name": "status_offline", "value": "#E84026" },
+    { "name": "status_online_bg", "value": "#1A64BB5C" },
+    { "name": "status_offline_bg", "value": "#1AE84026" },
+
+    { "name": "danger", "value": "#E84026" },
+    { "name": "warning", "value": "#E8A23D" }
+  ]
+}

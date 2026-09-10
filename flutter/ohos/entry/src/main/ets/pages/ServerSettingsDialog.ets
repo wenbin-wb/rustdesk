@@ -7,6 +7,7 @@ export struct ServerSettingsDialog {
   @State relayServer: string = '';
   @State apiServer: string = '';
   @State publicKey: string = '';
+  @State webClientUrl: string = '';
   @State statusMsg: string = '';
   onSaved?: () => void;
 
@@ -17,6 +18,7 @@ export struct ServerSettingsDialog {
       this.relayServer = cfg.relayServer;
       this.apiServer = cfg.apiServer;
       this.publicKey = cfg.key;
+      this.webClientUrl = cfg.webClientUrl || '';
     });
   }
 
@@ -26,7 +28,8 @@ export struct ServerSettingsDialog {
       idServer: this.idServer.trim(),
       relayServer: this.relayServer.trim(),
       apiServer: this.apiServer.trim(),
-      key: this.publicKey.trim()
+      key: this.publicKey.trim(),
+      webClientUrl: this.webClientUrl.trim()
     };
     await configManager.saveServerConfig(cfg);
     if (this.onSaved) {
@@ -120,6 +123,22 @@ export struct ServerSettingsDialog {
             .borderRadius(6)
             .onChange((val: string) => {
               this.publicKey = val;
+            })
+        }
+
+        Column({ space: 4 }) {
+          Text('网页客户端/控制台 URL (可选)')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#4E5969')
+            .width('100%')
+          TextInput({ text: this.webClientUrl, placeholder: '如: http://ip:21118 或留空自动适配' })
+            .height(42)
+            .fontSize(14)
+            .backgroundColor('#F2F3F5')
+            .borderRadius(6)
+            .onChange((val: string) => {
+              this.webClientUrl = val;
             })
         }
       }

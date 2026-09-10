@@ -6,6 +6,7 @@ export interface ServerConfig {
   relayServer: string;
   apiServer: string;
   key: string;
+  webClientUrl?: string;
 }
 
 export interface UserProfile {
@@ -60,7 +61,8 @@ export class ConfigManager {
     const relayServer = (await this.pref.get('relay_server', '')) as string;
     const apiServer = (await this.pref.get('api_server', '')) as string;
     const key = (await this.pref.get('key', '')) as string;
-    return { idServer, relayServer, apiServer, key };
+    const webClientUrl = (await this.pref.get('web_client_url', '')) as string;
+    return { idServer, relayServer, apiServer, key, webClientUrl };
   }
 
   public async saveServerConfig(config: ServerConfig): Promise<void> {
@@ -71,6 +73,7 @@ export class ConfigManager {
     await this.pref.put('relay_server', config.relayServer.trim());
     await this.pref.put('api_server', config.apiServer.trim());
     await this.pref.put('key', config.key.trim());
+    await this.pref.put('web_client_url', (config.webClientUrl || '').trim());
     await this.pref.flush();
   }
 

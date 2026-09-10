@@ -1,16 +1,90 @@
 {
   "string": [
-    {
-      "name": "entry_desc",
-      "value": "RustDesk Remote Desktop"
-    },
-    {
-      "name": "EntryAbility_desc",
-      "value": "RustDesk Remote Desktop Entry"
-    },
-    {
-      "name": "EntryAbility_label",
-      "value": "RustDesk"
-    }
+    { "name": "entry_desc", "value": "RustDesk 远程桌面" },
+    { "name": "EntryAbility_desc", "value": "RustDesk 远程桌面入口" },
+    { "name": "EntryAbility_label", "value": "RustDesk" },
+
+    { "name": "tab_remote", "value": "远程" },
+    { "name": "tab_devices", "value": "设备" },
+    { "name": "tab_settings", "value": "设置" },
+
+    { "name": "status_ready", "value": "就绪" },
+    { "name": "status_offline", "value": "离线" },
+    { "name": "status_service_running", "value": "服务运行中" },
+
+    { "name": "home_connect_title", "value": "控制远程设备" },
+    { "name": "home_id_placeholder", "value": "输入远程设备 ID" },
+    { "name": "home_connect", "value": "连接" },
+    { "name": "home_transfer_file", "value": "传输文件" },
+    { "name": "home_my_device_title", "value": "本机共享与受控" },
+    { "name": "home_my_id", "value": "本机设备 ID" },
+    { "name": "home_one_time_password", "value": "一次性密码" },
+    { "name": "home_refresh", "value": "刷新" },
+    { "name": "home_id_generating", "value": "正在读取…" },
+    { "name": "home_public_relay", "value": "官方中继网络" },
+    { "name": "home_server", "value": "服务器" },
+
+    { "name": "peers_recent", "value": "最近" },
+    { "name": "peers_lan", "value": "局域网" },
+    { "name": "peers_recent_empty", "value": "暂无最近设备" },
+    { "name": "peers_recent_empty_hint", "value": "连接过的设备会自动记录在此" },
+    { "name": "peers_lan_scanning", "value": "正在扫描局域网设备…" },
+    { "name": "peers_lan_hint", "value": "同一网络下开启 RustDesk 的设备会被发现" },
+    { "name": "peers_count", "value": "共 %d 台" },
+
+    { "name": "devices_title", "value": "设备簿" },
+    { "name": "devices_empty", "value": "暂无已保存设备" },
+    { "name": "devices_empty_hint", "value": "连接过的设备会保存在此" },
+    { "name": "devices_clear_all", "value": "清空" },
+    { "name": "devices_connect", "value": "连接" },
+    { "name": "devices_delete", "value": "删除" },
+
+    { "name": "settings_account", "value": "账户" },
+    { "name": "settings_account_none", "value": "尚未登录" },
+    { "name": "settings_account_hint", "value": "登录以同步地址簿" },
+    { "name": "settings_login", "value": "登录" },
+    { "name": "settings_logout", "value": "退出" },
+    { "name": "settings_server", "value": "服务器与中继" },
+    { "name": "settings_server_configure", "value": "配置中继 / 自建服务器" },
+    { "name": "settings_server_current", "value": "当前服务器" },
+    { "name": "settings_system", "value": "系统信息" },
+    { "name": "settings_core_version", "value": "核心版本" },
+    { "name": "settings_bridge_version", "value": "桥接版本" },
+    { "name": "settings_arch", "value": "系统架构" },
+    { "name": "settings_arch_value", "value": "HarmonyOS (AArch64)" },
+
+    { "name": "dialog_login_title", "value": "登录 RustDesk 账号" },
+    { "name": "dialog_login_hint", "value": "登录后可同步地址簿与访问策略" },
+    { "name": "dialog_login_account", "value": "账号 / 邮箱" },
+    { "name": "dialog_login_account_placeholder", "value": "用户名或注册邮箱" },
+    { "name": "dialog_login_password", "value": "密码" },
+    { "name": "dialog_login_password_placeholder", "value": "账户密码" },
+    { "name": "dialog_login_submit", "value": "登录" },
+    { "name": "dialog_login_submitting", "value": "正在登录…" },
+
+    { "name": "dialog_password_title", "value": "输入访问密码" },
+    { "name": "dialog_password_hint", "value": "请输入远程设备的密码或临时口令" },
+    { "name": "dialog_password_placeholder", "value": "远程设备密码" },
+    { "name": "dialog_password_remember", "value": "记住该设备密码" },
+
+    { "name": "dialog_server_title", "value": "服务器设置" },
+    { "name": "dialog_server_hint", "value": "留空则使用官方服务器" },
+    { "name": "dialog_server_id", "value": "ID 服务器" },
+    { "name": "dialog_server_relay", "value": "中继服务器" },
+    { "name": "dialog_server_api", "value": "API 服务器" },
+    { "name": "dialog_server_key", "value": "公钥 Key" },
+    { "name": "dialog_server_reset", "value": "重置" },
+    { "name": "dialog_server_save", "value": "保存" },
+
+    { "name": "session_connecting", "value": "正在连接…" },
+    { "name": "session_disconnect", "value": "断开连接" },
+
+    { "name": "common_cancel", "value": "取消" },
+    { "name": "common_confirm", "value": "确定" },
+    { "name": "common_close", "value": "关闭" },
+    { "name": "common_retry", "value": "重试" },
+
+    { "name": "error_invalid_id", "value": "请输入有效的设备 ID" },
+    { "name": "error_self_id", "value": "不能连接到本机自身的 ID" }
   ]
 }
