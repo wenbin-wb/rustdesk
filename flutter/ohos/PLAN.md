@@ -78,7 +78,11 @@
 - [x] `base` 编译通过（客户端核心）✅
 - [x] `scrap` 编译通过（方案 A：门控 VPX/AOM + libyuv + 采集后端 + camera）
 - [x] 根 crate **编译通过** ✅ `cargo check --lib --target aarch64-unknown-linux-ohos --features flutter` → **exit 0**（143 warnings，无 error）
-- [ ] `cargo build --release` 链接并产出 `librustdesk.so`（验证链接阶段）
+- [x] **P1 完成：`cargo build --release` 链接并产出动态库** ✅
+  - 命令：`cargo build --release --target aarch64-unknown-linux-ohos --lib --features flutter` → `Finished release ... in 3m 00s`
+  - 产物：`target/aarch64-unknown-linux-ohos/release/liblibrustdesk.so`
+  - **已验证为真 aarch64 OHOS 动态库**：`ELF 7F454C46` / 64-bit / LE / `e_machine=183`(AArch64)，且导出真实 FFI 符号 `session_get_rgba`
+- [ ] 产物改名：cargo 输出 `liblibrustdesk.so`（因 `[lib] name = "librustdesk"`），而 App 侧 `DynamicLibrary.open('librustdesk.so')` 期望 `librustdesk.so` → 打包时需重命名（Android 构建同样处理）
 - [ ] 平台实现：设备信息 / 剪贴板 / 文件系统 / 音频 / 屏幕采集(占位)
 
 > **待清理（P1 收尾统一处理）**：`scrap` 在 ohos 下产生 8 条 warning（5 处 unused import、1 处 unused_mut、2 处 unused 变量），
