@@ -1,12 +1,18 @@
 /**
  * Settings tab: account, server configuration, and system information.
  *
- * The version rows read the linked artifacts rather than a hardcoded string, so a device
- * visibly reports which core and which bridge it is actually running. That is the quickest
- * way to confirm the native module loaded, and it is why these two rows exist at all.
+ * Every row is an HdsListItemCard from the UI Design Kit, and the section headings are plain
+ * text rather than cards. The page previously wrapped hand-built cards -- containing hand-built
+ * rows and buttons -- around HdsListItemCards, so it mixed two visual languages and stacked a
+ * card inside a card. Rows that do something carry an onClick and say so in their secondary
+ * line; there are no separate buttons, so every row has the same height, padding and press
+ * feedback.
+ *
+ * The version rows read the linked artifacts rather than hardcoded strings, so a device
+ * reports which core and which bridge it is actually running. That is the quickest way to
+ * confirm the native module loaded, which is why these rows exist at all.
  */
 
-import { SectionCard } from './SectionCard';
 import { UserProfile } from '../platform/ConfigStorage';
 import { getCoreVersion, getBridgeVersion, getCoreBuildDate, getApiServer } from '../platform/RustDeskBridge';
 import { HdsListItemCard } from '@kit.UIDesignKit';
@@ -34,113 +40,46 @@ export struct SettingsTab {
   }
 
   build() {
-    Column({ space: 12 }) {
-      this.buildAccountCard()
-      this.buildServerCard()
-      this.buildSystemCard()
+    Column({ space: 8 }) {
+      this.sectionHeader($r('app.string.settings_account'))
+      this.accountRow()
+
+      this.sectionHeader($r('app.string.settings_server'))
+      this.infoRow($r('app.string.settings_server_current'), this.serverLabel)
+      if (this.apiServer.length > 0) {
+        this.infoRow($r('app.string.dialog_server_api'), this.apiServer)
+      }
+      this.actionRow($r('app.string.settings_server_configure'),
+        $r('app.string.settings_server_current'),
+        () => { this.onOpenServerSettings(); })
+
+      this.sectionHeader($r('app.string.settings_system'))
+      this.infoRow($r('app.string.settings_core_version'),
+        this.coreVersion.length > 0 ? this.coreVersion : '—')
+      this.infoRow($r('app.string.settings_bridge_version'),
+        this.bridgeVersion.length > 0 ? this.bridgeVersion : '—')
+      this.infoRow($r('app.string.settings_arch'), $r('app.string.settings_arch_value'))
+      if (this.buildDate.length > 0) {
+        this.infoRow($r('app.string.settings_build'), this.buildDate)
+      }
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
+  /** A section label. Plain text: giving these card chrome would nest cards in cards. */
   @Builder
-  private buildAccountCard() {
-    SectionCard({ title: $r('app.string.settings_account') }) {
-      Row() {
-        Column({ space: 4 }) {
-          Text(this.userProfile.isLoggedIn
-            ? this.userProfile.username
-            : $r('app.string.settings_account_none'))
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_title'))
-          Text(this.userProfile.isLoggedIn && this.userProfile.email.length > 0
-            ? this.userProfile.email
-            : $r('app.string.settings_account_hint'))
-            .fontSize($r('app.float.font_caption'))
-            .fontColor($r('app.color.text_secondary'))
-        }
-        .alignItems(HorizontalAlign.Start)
-
-        Blank()
-
-        if (this.userProfile.isLoggedIn) {
-          Button($r('app.string.settings_logout'))
-            .fontSize(13)
-            .height(32)
-            .backgroundColor($r('app.color.status_offline_bg'))
-            .fontColor($r('app.color.danger'))
-            .borderRadius(8)
-            .onClick(() => {
-              this.onLogout();
-            })
-        } else {
-          Button($r('app.string.settings_login'))
-            .fontSize(13)
-            .height(32)
-            .backgroundColor($r('app.color.brand'))
-            .fontColor($r('app.color.on_brand'))
-            .borderRadius(8)
-            .onClick(() => {
-              this.onLogin();
-            })
-        }
-      }
+  private sectionHeader(title: ResourceStr) {
+    Text(title)
+      .fontSize($r('app.float.font_caption'))
+      .fontWeight(FontWeight.Medium)
+      .fontColor($r('app.color.text_secondary'))
       .width('100%')
-    }
+      .margin({ top: 8, bottom: 2 })
   }
 
   @Builder
-  private buildServerCard() {
-    SectionCard({ title: $r('app.string.settings_server') }) {
-      Column({ space: 12 }) {
-        this.buildInfoRow($r('app.string.settings_server_current'), this.serverLabel)
-        if (this.apiServer.length > 0) {
-          this.buildInfoRow($r('app.string.dialog_server_api'), this.apiServer)
-        }
-        Divider().color($r('app.color.divider'))
-        Button($r('app.string.settings_server_configure'))
-          .width('100%')
-          .height(40)
-          .fontSize(15)
-          .backgroundColor($r('app.color.bg_subtle'))
-          .fontColor($r('app.color.brand'))
-          .borderRadius(10)
-          .onClick(() => {
-            this.onOpenServerSettings();
-          })
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder
-  private buildSystemCard() {
-    SectionCard({ title: $r('app.string.settings_system') }) {
-      Column({ space: 12 }) {
-        this.buildInfoRow($r('app.string.settings_core_version'),
-          this.coreVersion.length > 0 ? this.coreVersion : '—')
-        Divider().color($r('app.color.divider'))
-        this.buildInfoRow($r('app.string.settings_bridge_version'),
-          this.bridgeVersion.length > 0 ? this.bridgeVersion : '—')
-        Divider().color($r('app.color.divider'))
-        this.buildInfoRow($r('app.string.settings_arch'), $r('app.string.settings_arch_value'))
-        if (this.buildDate.length > 0) {
-          Divider().color($r('app.color.divider'))
-          this.buildInfoRow('Build', this.buildDate)
-        }
-      }
-      .width('100%')
-    }
-  }
-
-  /**
-   * A label/value row, as an HDS list item card.
-   *
-   * The design kit owns the row height, padding, type scale and press feedback, so these
-   * rows match every other list in the system rather than approximating one.
-   */
-  @Builder
-  private buildInfoRow(label: ResourceStr, value: ResourceStr) {
+  private infoRow(label: ResourceStr, value: ResourceStr) {
     HdsListItemCard({
       textItem: {
         primaryText: { text: label },
@@ -148,5 +87,51 @@ export struct SettingsTab {
       }
     })
       .width('100%')
+  }
+
+  /** A row that performs an action when tapped. */
+  @Builder
+  private actionRow(label: ResourceStr, hint: ResourceStr, action: () => void) {
+    HdsListItemCard({
+      textItem: {
+        primaryText: { text: label },
+        secondaryText: { text: hint }
+      },
+      onClick: () => {
+        action();
+      }
+    })
+      .width('100%')
+  }
+
+  @Builder
+  private accountRow() {
+    if (this.userProfile.isLoggedIn) {
+      HdsListItemCard({
+        textItem: {
+          primaryText: { text: this.userProfile.username },
+          secondaryText: {
+            text: this.userProfile.email.length > 0
+              ? this.userProfile.email
+              : $r('app.string.settings_logout')
+          }
+        },
+        onClick: () => {
+          this.onLogout();
+        }
+      })
+        .width('100%')
+    } else {
+      HdsListItemCard({
+        textItem: {
+          primaryText: { text: $r('app.string.settings_account_none') },
+          secondaryText: { text: $r('app.string.settings_account_hint') }
+        },
+        onClick: () => {
+          this.onLogin();
+        }
+      })
+        .width('100%')
+    }
   }
 }

@@ -52,6 +52,7 @@
     { "name": "settings_bridge_version", "value": "桥接版本" },
     { "name": "settings_arch", "value": "系统架构" },
     { "name": "settings_arch_value", "value": "HarmonyOS (AArch64)" },
+    { "name": "settings_build", "value": "构建日期" },
 
     { "name": "dialog_login_title", "value": "登录 RustDesk 账号" },
     { "name": "dialog_login_hint", "value": "登录后可同步地址簿与访问策略" },
@@ -78,6 +79,13 @@
 
     { "name": "session_connecting", "value": "正在连接…" },
     { "name": "session_disconnect", "value": "断开连接" },
+    { "name": "session_target", "value": "目标设备" },
+    { "name": "session_core_status", "value": "核心连接状态" },
+    { "name": "session_idle", "value": "空闲" },
+    { "name": "session_last_remote", "value": "最近连接" },
+    { "name": "session_peer_sessions", "value": "该设备活动会话" },
+    { "name": "session_pending_title", "value": "远程画面尚未接通" },
+    { "name": "session_pending_body", "value": "本页面当前只显示核心的真实状态。把远端桌面画面渲染到屏幕上所需的视频通道（核心 Rgba 事件 → 屏幕纹理/画布）与核心到界面的实时事件通道仍在开发中，因此现在还看不到对方的画面。此前本页曾用内嵌网页模拟远程桌面，那并不是真的连接到你的设备，已移除。" },
 
     { "name": "common_cancel", "value": "取消" },
     { "name": "common_confirm", "value": "确定" },

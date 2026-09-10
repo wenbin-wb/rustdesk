@@ -52,6 +52,7 @@
     { "name": "settings_bridge_version", "value": "Bridge version" },
     { "name": "settings_arch", "value": "Architecture" },
     { "name": "settings_arch_value", "value": "HarmonyOS (AArch64)" },
+    { "name": "settings_build", "value": "Build date" },
 
     { "name": "dialog_login_title", "value": "Sign in to RustDesk" },
     { "name": "dialog_login_hint", "value": "Sign in to sync your address book and access policy" },
@@ -78,6 +79,13 @@
 
     { "name": "session_connecting", "value": "Connecting…" },
     { "name": "session_disconnect", "value": "Disconnect" },
+    { "name": "session_target", "value": "Target device" },
+    { "name": "session_core_status", "value": "Core status" },
+    { "name": "session_idle", "value": "Idle" },
+    { "name": "session_last_remote", "value": "Last connected" },
+    { "name": "session_peer_sessions", "value": "Active sessions on peer" },
+    { "name": "session_pending_title", "value": "Remote video is not connected yet" },
+    { "name": "session_pending_body", "value": "This page shows the core's real state and nothing else. Rendering the peer's desktop needs the video path (the core's Rgba events into a surface) and a live event channel from the core to the UI, which are still being built, so no picture appears yet. An earlier version of this page embedded a web client and looked like a session; it was not connected to your device and has been removed." },
 
     { "name": "common_cancel", "value": "Cancel" },
     { "name": "common_confirm", "value": "OK" },

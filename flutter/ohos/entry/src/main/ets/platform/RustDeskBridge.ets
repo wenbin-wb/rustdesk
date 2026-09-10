@@ -52,6 +52,12 @@ interface RustDeskNative {
   mainGetPeerSync(id: string): string;
   mainSetOption(key: string, value: string): void;
   mainSetOptions(json: string): void;
+  mainSetHomeDir(home: string): void;
+  mainDeviceId(id: string): void;
+  mainDeviceName(name: string): void;
+  mainInit(appDir: string, customClientConfig: string): void;
+  mainGetAsyncStatus(): string;
+  mainGetError(): string;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -156,9 +162,50 @@ export function setOption(key: string, value: string): void {
   native.mainSetOption(key, value);
 }
 
+/**
+ * Start the core.
+ *
+ * Must run once, before any other bridge call, or the core has no directory to write to and
+ * nothing it stores survives the process: the device id is regenerated on every launch and
+ * saved options are not found again. The order within is the one the Flutter client uses --
+ * directories and identity first, then init.
+ *
+ * @param appDir the application's own data directory, from the ability context.
+ * @param deviceName a display name; shown as this device's name to peers.
+ */
+export function initCore(appDir: string, deviceName: string): void {
+  native.mainSetHomeDir(appDir);
+  // DEVICE_ID is written but not read anywhere in the core today; an empty value leaves it at
+  // its default, and the real id comes from the core's own generated id. Passed for parity
+  // with the Flutter init sequence in case that changes.
+  native.mainDeviceId('');
+  native.mainDeviceName(deviceName);
+  native.mainInit(appDir, '');
+}
+
+/** The core's asynchronous job status, polled while starting up. */
+export function getAsyncStatus(): string {
+  return native.mainGetAsyncStatus();
+}
+
+/** The last error the core recorded, empty when there is none. */
+export function getLastError(): string {
+  return native.mainGetError();
+}
+
 /** Whether the given session is currently being recorded. */
 export function isSessionRecording(sessionId: string): boolean {
   return native.sessionGetIsRecording(sessionId);
+}
+
+/**
+ * How many live sessions a peer has.
+ *
+ * `connType` is the core's own connection-type code; 0 covers the ordinary remote-desktop
+ * case, which is the only one the UI asks about today.
+ */
+export function peerGetSessionsCount(id: string, connType: number): number {
+  return native.peerGetSessionsCount(id, connType);
 }
 
 /** Next texture key for registering an XComponent surface. */

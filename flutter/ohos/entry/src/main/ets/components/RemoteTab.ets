@@ -7,6 +7,7 @@
  */
 
 import { SectionCard } from './SectionCard';
+import { HdsListItemCard } from '@kit.UIDesignKit';
 import { getMyId, getCoreVersion } from '../platform/RustDeskBridge';
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
 
@@ -235,33 +236,19 @@ export struct RemoteTab {
 
   @Builder
   private buildPeerRow(device: StoredPeer) {
-    Row() {
-      Column({ space: 4 }) {
-        Text(device.alias.length > 0 ? device.alias : device.id)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_title'))
-        Text(device.id)
-          .fontSize($r('app.float.font_caption'))
-          .fontColor($r('app.color.text_secondary'))
+    // The row itself is the connect action, as in the devices list, so a peer looks and
+    // behaves the same wherever it appears.
+    HdsListItemCard({
+      textItem: {
+        primaryText: { text: device.alias.length > 0 ? device.alias : device.id },
+        secondaryText: { text: device.id }
+      },
+      onClick: () => {
+        this.remoteIdInput = device.id;
+        this.onConnect(device.id);
       }
-      .alignItems(HorizontalAlign.Start)
-
-      Blank()
-
-      Button($r('app.string.home_connect'))
-        .fontSize(13)
-        .height(32)
-        .backgroundColor($r('app.color.brand'))
-        .fontColor($r('app.color.on_brand'))
-        .borderRadius(8)
-        .onClick(() => {
-          this.remoteIdInput = device.id;
-          this.onConnect(device.id);
-        })
-    }
-    .width('100%')
-    .padding({ top: 8, bottom: 8 })
+    })
+      .width('100%')
   }
 
   @Builder

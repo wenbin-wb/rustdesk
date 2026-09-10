@@ -7,44 +7,31 @@ import { ConfigManager, ServerConfig } from '../platform/ConfigStorage';
  * here more than elsewhere: a TextInput whose background is a fixed light grey while the
  * placeholder colour follows the system theme produces light text on a light field in dark
  * mode, which is unreadable. Both the background and the placeholder come from tokens now.
+ *
+ * The values are an @Link to the page's own state rather than something this dialog reads
+ * for itself. When it read on aboutToAppear the fields came up empty on reopen: the dialog
+ * instance is tied to its controller, which is a member of the page, so the read happened
+ * once, before the core and preferences were ready, and never again. The page now loads the
+ * configuration and then opens the dialog, so what is shown is always what was loaded.
  */
 @CustomDialog
 export struct ServerSettingsDialog {
   controller: CustomDialogController;
-  @State idServer: string = '';
-  @State relayServer: string = '';
-  @State apiServer: string = '';
-  @State publicKey: string = '';
-  @State webClientUrl: string = '';
+  /** Owned by the page; edited here and saved back through ConfigManager. */
+  @Link serverCfg: ServerConfig;
   @State statusMsg: string = '';
   onSaved?: () => void;
 
-  aboutToAppear(): void {
-    ConfigManager.getInstance().getServerConfig().then((cfg: ServerConfig) => {
-      this.idServer = cfg.idServer;
-      this.relayServer = cfg.relayServer;
-      this.apiServer = cfg.apiServer;
-      this.publicKey = cfg.key;
-      this.webClientUrl = cfg.webClientUrl || '';
-    });
-  }
-
-  /**
-   * Persist to the app store and hand the same values to the core.
-   *
-   * The core keeps its own configuration and is what actually talks to the network, so
-   * writing only to the ArkTS store would leave the running core on the public servers --
-   * the save would appear to work and change nothing. ConfigManager owns the core handoff.
-   */
   private async saveConfig(): Promise<void> {
     const cfg: ServerConfig = {
-      idServer: this.idServer.trim(),
-      relayServer: this.relayServer.trim(),
-      apiServer: this.apiServer.trim(),
-      key: this.publicKey.trim(),
-      webClientUrl: this.webClientUrl.trim()
+      idServer: this.serverCfg.idServer.trim(),
+      relayServer: this.serverCfg.relayServer.trim(),
+      apiServer: this.serverCfg.apiServer.trim(),
+      key: this.serverCfg.key.trim(),
+      webClientUrl: (this.serverCfg.webClientUrl || '').trim()
     };
     await ConfigManager.getInstance().saveServerConfig(cfg);
+    this.serverCfg = cfg;
     if (this.onSaved) {
       this.onSaved();
     }
@@ -96,14 +83,14 @@ export struct ServerSettingsDialog {
         .width('100%')
 
       Column({ space: 10 }) {
-        this.field($r('app.string.dialog_server_id'), 'custom.rustdesk.com', this.idServer,
-          (v: string) => { this.idServer = v; })
-        this.field($r('app.string.dialog_server_relay'), 'relay.example.com', this.relayServer,
-          (v: string) => { this.relayServer = v; })
-        this.field($r('app.string.dialog_server_api'), 'http://custom.rustdesk.com:21114', this.apiServer,
-          (v: string) => { this.apiServer = v; })
-        this.field($r('app.string.dialog_server_key'), 'Base64', this.publicKey,
-          (v: string) => { this.publicKey = v; })
+        this.field($r('app.string.dialog_server_id'), 'custom.rustdesk.com', this.serverCfg.idServer,
+          (v: string) => { this.serverCfg.idServer = v; })
+        this.field($r('app.string.dialog_server_relay'), 'relay.example.com', this.serverCfg.relayServer,
+          (v: string) => { this.serverCfg.relayServer = v; })
+        this.field($r('app.string.dialog_server_api'), 'http://custom.rustdesk.com:21114', this.serverCfg.apiServer,
+          (v: string) => { this.serverCfg.apiServer = v; })
+        this.field($r('app.string.dialog_server_key'), 'Base64', this.serverCfg.key,
+          (v: string) => { this.serverCfg.key = v; })
       }
       .width('100%')
 
@@ -123,10 +110,15 @@ export struct ServerSettingsDialog {
           .fontColor($r('app.color.text_body'))
           .borderRadius($r('app.float.radius_control'))
           .onClick(() => {
-            this.idServer = '';
-            this.relayServer = '';
-            this.apiServer = '';
-            this.publicKey = '';
+            // Clearing the fields restores the core's built-in default, which is the public
+            // servers; save is still what applies it.
+            this.serverCfg = {
+              idServer: '',
+              relayServer: '',
+              apiServer: '',
+              key: '',
+              webClientUrl: ''
+            };
           })
 
         Button($r('app.string.dialog_server_save'))

@@ -1,9 +1,14 @@
 import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ClipboardBridge } from '../platform/ClipboardBridge';
 import { FilePickerBridge } from '../platform/FilePickerBridge';
 import { ScreenCaptureBridge } from '../platform/ScreenCaptureBridge';
 import { ConfigManager } from '../platform/ConfigStorage';
+import { initCore, getLastError } from '../platform/RustDeskBridge';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskCore';
 
 /**
  * Application entry.
@@ -20,6 +25,11 @@ export default class EntryAbility extends UIAbility {
   private screenCaptureBridge: ScreenCaptureBridge | null = null;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    // Start the core first. Until it has a data directory it cannot persist anything, which
+    // is why the device id used to change on every launch and why saved options were not
+    // found on the next run. Everything below depends on a started core.
+    this.startCore();
+
     // Nothing ever opened the preferences store, so every read came back empty and every
     // save returned early -- which is why a self-hosted server appeared to save and then
     // showed as unset. This is the call that was missing.
@@ -27,6 +37,28 @@ export default class EntryAbility extends UIAbility {
     this.filePickerBridge = new FilePickerBridge(this.context);
     this.screenCaptureBridge = new ScreenCaptureBridge(this.context);
     this.clipboardBridge.init();
+  }
+
+  /**
+   * Hand the core its identity and working directory, then start it.
+   *
+   * `filesDir` is this application's own directory inside the sandbox and is the only place
+   * the process may write, so it backs both the config path and the home path. Failures are
+   * logged rather than thrown: a core that did not start still leaves a usable UI, and this
+   * runs before the first frame.
+   */
+  private startCore(): void {
+    try {
+      const dir = this.context.filesDir;
+      const name = this.context.applicationInfo?.label ?? 'RustDesk';
+      initCore(dir, name);
+      const err = getLastError();
+      if (err.length > 0) {
+        hilog.warn(DOMAIN, TAG, 'core reported an error after init: %{public}s', err);
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'core init failed: %{public}s', JSON.stringify(e));
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

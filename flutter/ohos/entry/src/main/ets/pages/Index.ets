@@ -11,6 +11,7 @@
  */
 
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Breakpoint, observeBreakpoint, usesSideNavigation, pagePadding, maxContentWidth } from '../common/Breakpoint';
 import { RemoteTab, formatId } from '../components/RemoteTab';
 import { DevicesTab } from '../components/DevicesTab';
@@ -22,6 +23,9 @@ import { RemoteSessionPage } from './RemoteSessionPage';
 import { ConfigManager, ServerConfig, StoredPeer, UserProfile } from '../platform/ConfigStorage';
 import { getOption } from '../platform/RustDeskBridge';
 import { AuthService } from '../platform/AuthService';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDesk';
 
 @Entry
 @Component
@@ -37,6 +41,22 @@ struct Index {
   };
   @State private isInRemoteSession: boolean = false;
   @State private connectedTargetId: string = '';
+
+  /**
+   * Server configuration, owned here and linked into the settings dialog.
+   *
+   * The dialog used to read this itself on aboutToAppear, which ran once -- when the page was
+   * built, before the core and preferences were ready -- so reopening it showed empty fields
+   * even after a successful save. Owning it here and refreshing before each open makes what
+   * the dialog shows the same thing the app actually uses.
+   */
+  @State private serverCfg: ServerConfig = {
+    idServer: '',
+    relayServer: '',
+    apiServer: '',
+    key: '',
+    webClientUrl: ''
+  };
 
   /** Detaches the breakpoint listeners; leaving them attached would keep this page alive. */
   private stopObservingBreakpoint: () => void = () => {};
@@ -54,6 +74,7 @@ struct Index {
   // rim. With it the builder's own background and radius are the only ones drawn.
   private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
     builder: ServerSettingsDialog({
+      serverCfg: $serverCfg,
       onSaved: () => {
         this.loadServerConfig();
       }
@@ -117,6 +138,9 @@ struct Index {
   private async loadServerConfig(): Promise<void> {
     const config = ConfigManager.getInstance();
     const cfg: ServerConfig = await config.getServerConfig();
+    // Keep the full configuration, not just the label: the settings dialog edits these values
+    // and shows them when reopened.
+    this.serverCfg = cfg;
     // Read the effective value back from the core rather than trusting the local copy, so
     // the label shows the server the app will actually use. An empty result means the core
     // is on its built-in default, i.e. the public servers.
@@ -125,6 +149,23 @@ struct Index {
     this.serverLabel = effective.length > 0
       ? effective
       : $r('app.string.home_public_relay');
+  }
+
+  /**
+   * Show the server settings, with the stored values loaded first.
+   *
+   * The load is awaited on purpose: opening straight away would show whatever the page last
+   * held, and on a cold start that is empty. A failed load must not stop the dialog from
+   * opening, or a bad read would make the settings unreachable; the fields would simply open
+   * with the values the page already had.
+   */
+  private async openServerSettings(): Promise<void> {
+    try {
+      await this.loadServerConfig();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'could not load the server configuration: %{public}s', JSON.stringify(e));
+    }
+    this.serverSettingsDialogController.open();
   }
 
   private async loadUserProfile(): Promise<void> {
@@ -256,7 +297,7 @@ struct Index {
         .fontColor($r('app.color.text_secondary'))
         .borderRadius(16)
         .onClick(() => {
-          this.serverSettingsDialogController.open();
+           this.openServerSettings();
         })
     }
     .width('100%')
@@ -333,7 +374,7 @@ struct Index {
             },
             onTransferFile: () => {},
             onOpenServerSettings: () => {
-              this.serverSettingsDialogController.open();
+               this.openServerSettings();
             }
           })
         } else if (index === 1) {
@@ -353,7 +394,7 @@ struct Index {
               this.handleLogout();
             },
             onOpenServerSettings: () => {
-              this.serverSettingsDialogController.open();
+               this.openServerSettings();
             }
           })
         }

@@ -1,7 +1,7 @@
 From 4d5432d51f2f5a7d8a600d685b1fc94084622eae Mon Sep 17 00:00:00 2001
 From: wenbin <wenbin_mj@163.com>
 Date: Thu, 10 Sep 2026 19:09:17 +0800
-Subject: [PATCH 2/3] ohos: drop the x11 dependency on HarmonyOS
+Subject: [PATCH 2/4] ohos: drop the x11 dependency on HarmonyOS
 
 hbb_common re-exported the x11 crate for every target_os = linux, which includes ohos.
 The x11 crate's build script probes for libX11 with pkg-config and panics when

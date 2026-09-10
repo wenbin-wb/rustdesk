@@ -44,6 +44,15 @@ export const mainGetPeerSync: (id: string) => string;
 export const mainSetOption: (key: string, value: string) => void;
 export const mainSetOptions: (json: string) => void;
 
+// Core lifecycle. Must run before any other call: until it does, the core has no directory
+// to write to, so the device id is regenerated each launch and nothing is persisted.
+export const mainSetHomeDir: (home: string) => void;
+export const mainDeviceId: (id: string) => void;
+export const mainDeviceName: (name: string) => void;
+export const mainInit: (appDir: string, customClientConfig: string) => void;
+export const mainGetAsyncStatus: () => string;
+export const mainGetError: () => string;
+
 // Rendering
 export const getNextTextureKey: () => number;
 

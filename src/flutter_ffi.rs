@@ -82,6 +82,14 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
         hbb_common::init_log(false, "flutter_ffi");
     }
+    // HarmonyOS has neither the android_logger nor the iOS env_logger arm above, so without
+    // this the core would run without recording anything and a failure on device would leave
+    // nothing to read. The file logger writes under the directory mainInit supplied, which
+    // resolves correctly now that Config::path handles this platform.
+    #[cfg(target_env = "ohos")]
+    {
+        hbb_common::init_log(false, "flutter_ffi");
+    }
 }
 
 #[inline]

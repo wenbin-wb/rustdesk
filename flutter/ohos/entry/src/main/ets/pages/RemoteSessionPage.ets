@@ -1,165 +1,189 @@
-import { DesktopCanvas } from './DesktopCanvas';
-import webview from '@ohos.web.webview';
-import { ConfigManager, ServerConfig } from '../platform/ConfigStorage';
+import { getConnectStatus, getLastRemoteId, peerGetSessionsCount } from '../platform/RustDeskBridge';
+
+/**
+ * Remote session view.
+ *
+ * This page used to load https://rustdesk.com/web/ into a WebView, with a fallback mode that
+ * hand-drew a fake desktop on a canvas and logged the taps. Both looked like a session and
+ * neither was one: the web client is a separate product that knows nothing about this app's
+ * device id or its target, so choosing "connect" opened a web page rather than the peer.
+ *
+ * Streaming a real session needs the video path (the core's Rgba events into an XComponent
+ * surface) and an event channel from the core to ArkTS, which is the P4 work in PLAN.md and
+ * is not built yet. Until then this page states that plainly instead of substituting
+ * something that resembles a session. It still shows what the core actually reports, so it is
+ * usable for checking that the core is running and reachable.
+ */
 
 @Component
 export struct RemoteSessionPage {
   @Prop targetId: string = '';
   onDisconnect?: () => void;
-  @State showToolbar: boolean = true;
-  @State engineMode: string = 'web'; // Default to real Web client connection
-  @State qualityMode: string = '流畅 (Balanced)';
-  @State webUrl: string = 'https://rustdesk.com/web/';
-  @State connectionTips: string = '正在接入远程计算机与中继流...';
-  private webController: webview.WebviewController = new webview.WebviewController();
-  private serverCfg: ServerConfig = { idServer: '', relayServer: '', apiServer: '', key: '' };
-  private rememberedPassword: string = '';
+
+  @State private coreStatus: string = '';
+  @State private lastRemoteId: string = '';
+  @State private sessionCount: number = 0;
+  @State private polling: boolean = false;
+
+  /** Polls the core while this page is up; cleared on disappear so it cannot outlive it. */
+  private timerId: number = -1;
 
   aboutToAppear(): void {
-    const configManager = ConfigManager.getInstance();
-    configManager.getServerConfig().then((cfg: ServerConfig) => {
-      this.serverCfg = cfg;
-      if (cfg.webClientUrl && cfg.webClientUrl.trim().length > 0) {
-        this.webUrl = cfg.webClientUrl.trim();
-      } else if (cfg.idServer && cfg.idServer.trim().length > 0) {
-        // If user configured a custom ID server, default to rustdesk web client which will be injected with their custom server
-        this.webUrl = 'https://rustdesk.com/web/';
-      } else {
-        this.webUrl = 'https://rustdesk.com/web/';
-      }
-    });
-
-    const rawId = this.targetId.replace(/\s+/g, '');
-    configManager.getPeerPassword(rawId).then((pwd: string) => {
-      this.rememberedPassword = pwd || '';
-    });
+    this.refresh();
+    this.timerId = setInterval(() => {
+      this.refresh();
+    }, 1000);
   }
 
-  private injectCredentialsAndServer(): void {
-    const rawId = this.targetId.replace(/\s+/g, '');
-    const pwd = this.rememberedPassword;
-    const idServer = this.serverCfg.idServer || '';
-    const relayServer = this.serverCfg.relayServer || '';
-    const key = this.serverCfg.key || '';
-
-    // Inject configuration into web client localStorage & window context
-    const script = `
-      (function() {
-        try {
-          if ('${idServer}'.length > 0) {
-            localStorage.setItem('custom-rendezvous-server', '${idServer}');
-            localStorage.setItem('relay-server', '${relayServer}');
-            localStorage.setItem('key', '${key}');
-            if (window.setByName) {
-              window.setByName('options', JSON.stringify({
-                'custom-rendezvous-server': '${idServer}',
-                'relay-server': '${relayServer}',
-                'key': '${key}'
-              }));
-            }
-          }
-          // Attempt to prefill remote ID and trigger connect if input exists
-          const inputs = document.querySelectorAll('input');
-          for (let i = 0; i < inputs.length; i++) {
-            const input = inputs[i];
-            if (input.placeholder && (input.placeholder.includes('ID') || input.placeholder.includes('id'))) {
-              input.value = '${rawId}';
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-          }
-        } catch(e) {
-          console.error('RustDesk injection error:', e);
-        }
-      })();
-    `;
-
-    try {
-      this.webController.runJavaScript(script);
-    } catch {
-      // Ignore if controller not ready
+  aboutToDisappear(): void {
+    if (this.timerId !== -1) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
     }
+  }
+
+  private refresh(): void {
+    this.coreStatus = getConnectStatus();
+    this.lastRemoteId = getLastRemoteId();
+    // Peer state is a core query, so this is real information even though the session itself
+    // is not started.
+    try {
+      this.sessionCount = peerGetSessionsCount(this.rawTarget(), 0);
+    } catch (e) {
+      this.sessionCount = 0;
+    }
+  }
+
+  private rawTarget(): string {
+    return this.targetId.replace(/\s+/g, '');
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
-      // Main Display Layer
-      if (this.engineMode === 'web') {
-        Web({ src: this.webUrl, controller: this.webController })
-          .width('100%')
-          .height('100%')
-          .domStorageAccess(true)
-          .fileAccess(true)
-          .imageAccess(true)
-          .onlineImageAccess(true)
-          .javaScriptAccess(true)
-          .backgroundColor('#0B0F17')
-          .onPageEnd(() => {
-            this.connectionTips = '中继通道建立成功，已加载远端桌面';
-            this.injectCredentialsAndServer();
-          })
-      } else {
-        // Native interactive canvas backup
-        DesktopCanvas({ targetId: this.targetId })
-          .width('100%')
-          .height('100%')
-      }
-
-      // Top Floating Toolbar (HarmonyOS 7 Floating Capsule)
-      if (this.showToolbar) {
-        Row() {
-          Row({ space: 8 }) {
-            Row()
-              .width(8)
-              .height(8)
-              .borderRadius(4)
-              .backgroundColor('#00B42A')
-            Text(this.targetId)
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#FFFFFF')
-          }
-
-          Blank()
-
-          Row({ space: 8 }) {
-            // Engine mode toggle
-            Button(this.engineMode === 'web' ? '网页流 (当前)' : 'Canvas')
-              .fontSize(11)
-              .height(28)
-              .backgroundColor('rgba(255, 255, 255, 0.2)')
-              .fontColor('#FFFFFF')
-              .borderRadius(14)
-              .onClick(() => {
-                this.engineMode = this.engineMode === 'web' ? 'canvas' : 'web';
-              })
-
-            // Disconnect Session Button
-            Button('断开连接')
-              .fontSize(12)
-              .height(28)
-              .backgroundColor('#F53F3F')
-              .fontColor('#FFFFFF')
-              .borderRadius(6)
-              .onClick(() => {
-                if (this.onDisconnect) {
-                  this.onDisconnect();
-                }
-              })
-          }
-        }
-        .width('94%')
-        .height(48)
-        .padding({ left: 14, right: 14 })
-        .backgroundColor('rgba(29, 33, 41, 0.85)')
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
-        .borderRadius(24)
-        .margin({ top: 36 })
-        .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.4)', offsetX: 0, offsetY: 4 })
-      }
+    Column({ space: 16 }) {
+      this.buildHeader()
+      this.buildStatusCard()
+      this.buildPendingCard()
+      Blank()
+      this.buildFooter()
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#0B0F17')
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .backgroundColor($r('app.color.bg_page'))
+  }
+
+  @Builder
+  private buildHeader() {
+    Row({ space: 10 }) {
+      Column({ space: 4 }) {
+        Text($r('app.string.session_target'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
+        Text(this.targetId)
+          .fontSize($r('app.float.font_title'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_title'))
+      }
+      .alignItems(HorizontalAlign.Start)
+
+      Blank()
+
+      Button($r('app.string.session_disconnect'))
+        .fontSize($r('app.float.font_caption'))
+        .height(36)
+        .backgroundColor($r('app.color.status_offline_bg'))
+        .fontColor($r('app.color.danger'))
+        .borderRadius($r('app.float.radius_control'))
+        .onClick(() => {
+          if (this.onDisconnect) {
+            this.onDisconnect();
+          }
+        })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private buildStatusCard() {
+    Column({ space: 10 }) {
+      Row() {
+        Text($r('app.string.session_core_status'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
+        Blank()
+        Text(this.coreStatus.length > 0 ? this.coreStatus : $r('app.string.session_idle'))
+          .fontSize($r('app.float.font_body'))
+          .fontColor($r('app.color.text_body'))
+      }
+      .width('100%')
+
+      Divider().color($r('app.color.divider'))
+
+      Row() {
+        Text($r('app.string.session_last_remote'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
+        Blank()
+        Text(this.lastRemoteId.length > 0 ? this.lastRemoteId : '—')
+          .fontSize($r('app.float.font_body'))
+          .fontColor($r('app.color.text_body'))
+      }
+      .width('100%')
+
+      Divider().color($r('app.color.divider'))
+
+      Row() {
+        Text($r('app.string.session_peer_sessions'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
+        Blank()
+        Text(this.sessionCount.toString())
+          .fontSize($r('app.float.font_body'))
+          .fontColor($r('app.color.text_body'))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor($r('app.color.bg_card'))
+    .borderRadius($r('app.float.radius_card'))
+  }
+
+  @Builder
+  private buildPendingCard() {
+    Column({ space: 8 }) {
+      Text($r('app.string.session_pending_title'))
+        .fontSize($r('app.float.font_subtitle'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.warning'))
+        .width('100%')
+      Text($r('app.string.session_pending_body'))
+        .fontSize($r('app.float.font_body'))
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor($r('app.color.bg_card'))
+    .borderRadius($r('app.float.radius_card'))
+  }
+
+  @Builder
+  private buildFooter() {
+    Row() {
+      Button($r('app.string.common_close'))
+        .layoutWeight(1)
+        .height(44)
+        .fontSize($r('app.float.font_body'))
+        .backgroundColor($r('app.color.bg_subtle'))
+        .fontColor($r('app.color.text_body'))
+        .borderRadius($r('app.float.radius_control'))
+        .onClick(() => {
+          if (this.onDisconnect) {
+            this.onDisconnect();
+          }
+        })
+    }
+    .width('100%')
   }
 }

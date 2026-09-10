@@ -275,3 +275,52 @@ pub fn main_set_option(key: String, value: String) {
 pub fn main_set_options(json: String) {
     librustdesk::flutter_ffi::main_set_options(json)
 }
+
+// --- core lifecycle -----------------------------------------------------------
+//
+// The core has to be told who it is and where it may write before anything else works. Until
+// this sequence runs, Config::path() resolves against a directory that was never set, so the
+// device id is regenerated on every launch and no option or peer is ever persisted -- the
+// settings UI writes values that the next process cannot find. The order below is the one the
+// Flutter side uses (flutter/lib/models/native_model.dart): identity and directories first,
+// then init.
+
+/// Directory the core may write its configuration and data to.
+#[napi(js_name = "mainSetHomeDir")]
+pub fn main_set_home_dir(home: String) {
+    librustdesk::flutter_ffi::main_set_home_dir(home)
+}
+
+/// This device's id, as decided by the host application before the core starts.
+#[napi(js_name = "mainDeviceId")]
+pub fn main_device_id(id: String) {
+    librustdesk::flutter_ffi::main_device_id(id)
+}
+
+/// This device's display name.
+#[napi(js_name = "mainDeviceName")]
+pub fn main_device_name(name: String) {
+    librustdesk::flutter_ffi::main_device_name(name)
+}
+
+/// Start the core.
+///
+/// `app_dir` is the application's data directory; it becomes the base for every path the core
+/// resolves, and `custom_client_config` is left empty for the built-in client configuration.
+/// Call this after the setters above and before any other API.
+#[napi(js_name = "mainInit")]
+pub fn main_init(app_dir: String, custom_client_config: String) {
+    librustdesk::flutter_ffi::main_init(app_dir, custom_client_config)
+}
+
+/// The core's asynchronous job status, which the UI polls while starting up.
+#[napi(js_name = "mainGetAsyncStatus")]
+pub fn main_get_async_status() -> String {
+    librustdesk::flutter_ffi::main_get_async_status()
+}
+
+/// The last error the core recorded, empty when there is none.
+#[napi(js_name = "mainGetError")]
+pub fn main_get_error() -> String {
+    librustdesk::flutter_ffi::main_get_error()
+}
