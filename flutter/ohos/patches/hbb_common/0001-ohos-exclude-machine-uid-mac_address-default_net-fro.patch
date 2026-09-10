@@ -1,0 +1,101 @@
+From b91106e708d02799f989f533145f45340844f03a Mon Sep 17 00:00:00 2001
+From: wenbin <wenbin_mj@163.com>
+Date: Thu, 10 Sep 2026 17:48:43 +0800
+Subject: [PATCH 1/3] ohos: exclude machine-uid/mac_address/default_net from
+ the ohos target
+
+The HarmonyOS build (target_env = ohos) is a mobile client, like android/ios. These desktop-only crates either fail to build for the target (machine-uid's build.rs compiles win.cpp based on the HOST cfg) or have no HarmonyOS equivalent. Extend the existing mobile cfg gates with target_env = ohos and fall back to the same behaviour the other mobile targets use.
+
+- Cargo.toml: drop mac_address/default_net/machine-uid for ohos
+- lib.rs: gate the mac_address/machine_uid re-exports and get_uuid()
+- fingerprint.rs: use the zeroed addr like the other mobile targets
+- config.rs: get_auto_id() falls back to a random id like android/ios
+---
+ Cargo.toml         | 2 +-
+ src/config.rs      | 4 ++--
+ src/fingerprint.rs | 4 ++--
+ src/lib.rs         | 6 +++---
+ 4 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 8e17356..33bacb2 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -71,7 +71,7 @@ async-recursion = "1.1"
+ webrtc = { version = "0.13.0", optional = true }
+ libloading = "0.8"
+ 
+-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
++[target.'cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))'.dependencies]
+ mac_address = "1.1"
+ default_net = { git = "https://github.com/rustdesk-org/default_net" }
+ machine-uid = { git = "https://github.com/rustdesk-org/machine-uid" }
+diff --git a/src/config.rs b/src/config.rs
+index 6fe1004..c3e85e8 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1044,7 +1044,7 @@ impl Config {
+     }
+ 
+     fn get_auto_id() -> Option<String> {
+-        #[cfg(any(target_os = "android", target_os = "ios"))]
++        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
+         {
+             return Some(
+                 rand::thread_rng()
+@@ -1053,7 +1053,7 @@ impl Config {
+             );
+         }
+ 
+-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
++        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+         {
+             let mut id = 0u32;
+             if let Ok(Some(ma)) = mac_address::get_mac_address() {
+diff --git a/src/fingerprint.rs b/src/fingerprint.rs
+index 2d8985e..c2a5f60 100644
+--- a/src/fingerprint.rs
++++ b/src/fingerprint.rs
+@@ -223,9 +223,9 @@ impl FingerprintingInfo {
+             platform: std::env::consts::OS.to_string(),
+             arch: std::env::consts::ARCH.to_string(),
+             id,
+-            #[cfg(any(target_os = "android", target_os = "ios"))]
++            #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
+             addr: "0".repeat(16),
+-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
++            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+             addr: {
+                 let mut addr = default_net::get_mac().map(|m| m.addr).unwrap_or_default();
+                 if addr.is_empty() {
+diff --git a/src/lib.rs b/src/lib.rs
+index 20dfa43..006775d 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -27,7 +27,7 @@ pub use futures_util;
+ pub mod config;
+ pub mod mem;
+ pub use lazy_static;
+-#[cfg(not(any(target_os = "android", target_os = "ios")))]
++#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+ pub use mac_address;
+ pub use rand;
+ pub use regex;
+@@ -44,7 +44,7 @@ pub mod sh;
+ pub use base64;
+ #[cfg(not(any(target_os = "android", target_os = "ios")))]
+ pub use dlopen;
+-#[cfg(not(any(target_os = "android", target_os = "ios")))]
++#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+ pub use machine_uid;
+ pub use serde_derive;
+ pub use serde_json;
+@@ -316,7 +316,7 @@ pub fn get_exe_time() -> SystemTime {
+ /// - Windows shutdown: "The media is write protected. (os error 19)"
+ /// - macOS (hard to reproduce, reproduced at login screen): "No matching IOPlatformUUID in `ioreg -rd1 -c IOPlatformExpertDevice` command"
+ pub fn get_uuid() -> Vec<u8> {
+-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
++    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+     {
+         use std::sync::atomic::{AtomicUsize, Ordering};
+ 

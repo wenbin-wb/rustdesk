@@ -1,0 +1,40 @@
+From 4d5432d51f2f5a7d8a600d685b1fc94084622eae Mon Sep 17 00:00:00 2001
+From: wenbin <wenbin_mj@163.com>
+Date: Thu, 10 Sep 2026 19:09:17 +0800
+Subject: [PATCH 2/3] ohos: drop the x11 dependency on HarmonyOS
+
+hbb_common re-exported the x11 crate for every target_os = linux, which includes ohos.
+The x11 crate's build script probes for libX11 with pkg-config and panics when
+cross-compiling, and HarmonyOS has no X11 anyway. Gate both the dependency and the
+re-export on not(target_env = ohos).
+---
+ Cargo.toml | 4 ++++
+ src/lib.rs | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 33bacb2..159d50b 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -86,4 +86,8 @@ webrtc = "0.13.0" # keep in lockstep with [dependencies] webrtc (rustc 1.75 pin,
+ 
+ [target.'cfg(target_os = "linux")'.dependencies]
+ users = { version = "0.11" }
++
++# HarmonyOS has no X11; the crate's build script probes for libX11 with pkg-config
++# and panics when cross-compiling.
++[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
+ x11 = "2.21"
+diff --git a/src/lib.rs b/src/lib.rs
+index 006775d..cc919da 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -71,7 +71,7 @@ pub use async_recursion;
+ #[cfg(target_os = "linux")]
+ pub use users;
+ pub use libloading;
+-#[cfg(target_os = "linux")]
++#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+ pub use x11;
+ 
+ pub type SessionID = uuid::Uuid;

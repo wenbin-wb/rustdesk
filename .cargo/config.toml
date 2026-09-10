@@ -34,3 +34,11 @@ rustflags = [
     "-C", "link-arg=--sysroot=C:/ohos-ndk/sysroot",
     "-C", "link-arg=-D__MUSL__",
 ]
+
+# To build for the DevEco emulator instead of a device, add the same block for
+# x86_64-unknown-linux-ohos with --target=x86_64-linux-ohos (the emulator images are
+# x86_64; see hw.cpu.arch in
+# ~/AppData/Local/Huawei/Emulator/deployed/<device>/config.ini). It is not enabled here
+# because it is unverified: bindgen needs its own per-target clang arguments in addition
+# to this linker block, and neither is currently exercised by the build script.
+
