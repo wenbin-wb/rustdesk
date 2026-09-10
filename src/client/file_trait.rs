@@ -7,7 +7,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn get_home_dir(&self) -> String {
         fs::get_home_as_string()
@@ -16,7 +17,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn get_next_job_id(&self) -> i32 {
         fs::get_next_job_id()
@@ -25,7 +27,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn update_next_job_id(&self, id: i32) {
         fs::update_next_job_id(id);
@@ -34,7 +37,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
@@ -87,7 +91,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn confirm_delete_files(&self, id: i32, file_num: i32) {
         self.send(Data::ConfirmDeleteFiles((id, file_num)));
@@ -96,7 +101,8 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "flutter"
+        feature = "flutter",
+        target_env = "ohos"
     )))]
     fn set_no_confirm(&self, id: i32) {
         self.send(Data::SetNoConfirm(id));

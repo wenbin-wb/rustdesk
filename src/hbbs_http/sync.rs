@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::{ui_interface::get_builtin_option, Connection};
 use hbb_common::{
     config::{self, Config, LocalConfig},
