@@ -13,10 +13,13 @@
  *   xl  width >= 1440    2in1 / desktop        as lg, with a wider content column
  *
  * `mediaquery` reports the current width and emits on every change, which is what makes a
- * fold/unfold reflow instead of requiring a rebuild.
+ * fold/unfold reflow instead of requiring a rebuild. It is reached through
+ * `UIContext.getMediaQuery()`: the module-level `mediaquery.matchMediaSync` was deprecated
+ * in API 18 in favour of that path.
  */
 
 import mediaquery from '@ohos.mediaquery';
+import { UIContext } from '@kit.ArkUI';
 
 export enum Breakpoint {
   Sm = 'sm',
@@ -44,15 +47,8 @@ export function usesSideNavigation(current: Breakpoint): boolean {
 }
 
 /**
- * True when a second column (list beside detail) fits.
- * Reserved for the pages that grow a detail pane; kept here so the thresholds live in one
- * place rather than being re-derived per page.
+ * Horizontal page padding, in vp, for the current breakpoint.
  */
-export function usesTwoPane(current: Breakpoint): boolean {
-  return atLeast(current, Breakpoint.Md);
-}
-
-/** Horizontal page padding, in vp, for the current breakpoint. */
 export function pagePadding(current: Breakpoint): number {
   switch (current) {
     case Breakpoint.Sm:
@@ -87,22 +83,22 @@ export function maxContentWidth(current: Breakpoint): number {
  * to seed its own state. Returns a disposer; call it from `aboutToDisappear`, otherwise
  * the listeners outlive the page and keep it referenced after it is gone.
  */
-export function observeBreakpoint(onChange: (bp: Breakpoint) => void): () => void {
-  const queries: mediaquery.MediaQueryListener[] = [];
+export function observeBreakpoint(uiContext: UIContext,
+                                  onChange: (bp: Breakpoint) => void): () => void {
   const listeners: Array<() => void> = [];
+  const mediaQuery = uiContext.getMediaQuery();
 
   // One listener per breakpoint rather than a single width listener: mediaquery matches
   // against a predicate, and taking the widest match avoids re-deriving the band from a
   // raw width at each call site.
   const register = (bp: Breakpoint, condition: string): void => {
-    const listener = mediaquery.matchMediaSync(condition);
+    const listener = mediaQuery.matchMediaSync(condition);
     const cb = (result: mediaquery.MediaQueryResult): void => {
       if (result.matches) {
         onChange(bp);
       }
     };
     listener.on('change', cb);
-    queries.push(listener);
     listeners.push(() => listener.off('change', cb));
     if (listener.matches) {
       onChange(bp);

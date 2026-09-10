@@ -24,7 +24,6 @@ import { AuthService } from '../platform/AuthService';
 @Entry
 @Component
 struct Index {
-  @State private activeTab: number = 0;
   @State private breakpoint: Breakpoint = Breakpoint.Sm;
   @State private serverLabel: ResourceStr = $r('app.string.home_public_relay');
   @State private userProfile: UserProfile = {
@@ -61,7 +60,7 @@ struct Index {
   });
 
   aboutToAppear(): void {
-    this.stopObservingBreakpoint = observeBreakpoint((bp: Breakpoint) => {
+    this.stopObservingBreakpoint = observeBreakpoint(this.getUIContext(), (bp: Breakpoint) => {
       this.breakpoint = bp;
     });
     this.loadServerConfig();
@@ -235,9 +234,6 @@ struct Index {
     .scrollable(false)
     .layoutWeight(1)
     .backgroundColor(Color.Transparent)
-    .onChange((index: number) => {
-      this.activeTab = index;
-    })
   }
 
   /**

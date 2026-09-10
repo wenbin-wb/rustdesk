@@ -54,7 +54,7 @@
 |---|---|---|
 | B1 | `AuthService.ets:58` | `interface` 写在函数体内，编译错误 |
 | B2 | `AuthService.ets:36` | 登录协议与 RustDesk API 不符 |
-| B3 | `ScreenCaptureBridge.ets` | `AVScreenCaptureRecorder` 在 SDK 中不存在 |
+| B3 | `ScreenCaptureBridge.ets` | ~~`AVScreenCaptureRecorder` 在 SDK 中不存在~~ **此判断有误，已更正**：该 API **存在**于 `@ohos.multimedia.media`（自 API 12），文件可编译。实际问题是其 `init` 配置用了 `fd: 0`，且未处理屏幕采集授权流程与 syscap 检查。见 §5 第 1 条 |
 | B4 | `RemoteStreamReceiver.ets` | AVPlayer 无法解 RustDesk 私有协议 |
 | B5 | `Index.ets` | ID/密码/连接/会话全 mock |
 | B6 | `DesktopCanvas.ets` | Canvas 画假桌面 |
@@ -138,8 +138,18 @@
   - 解析失败**不 panic**（跨 NAPI 边界 panic 会终止应用），而是走"会话不存在"的负结果分支
   - 已接入：`sessionIsMultiUiSession`、`sessionGetIsRecording`、`sessionGetEnableTrustedDevices`、`willSessionCloseCloseSession`、`sessionIsKeyboardModeSupported(id,mode)`、`sessionGetToggleOptionSync(id,arg)`、`sessionGetReverseMouseWheelSync(id)`
   - 产物 `librustdesk_ohos.so` **2.07 MB**，实测 **32/32 导出符号全部在位**
+- [ ] 🔴 **核心生命周期未接通（审核发现的 P2 阻塞项）**
+  - ArkTS 侧只调了读取接口，**未调用 `mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir`**，故 `Config::get_id()` 在未初始化状态下会落到 `gen_id()` 的随机分支 → 设备 ID 可能为空或每次冷启动都变（与旧 mock 症状无法区分）
+  - 需：桥接导出上述 4 个接口 → `EntryAbility` 启动时用应用沙盒目录调用 → 再让 `getMyId()` 有真实意义
+- [ ] NAPI 模块缺少 `.d.ts`：hvigor 警告 *"module for 'librustdesk_ohos.so' is not verified ... make sure the corresponding .d.ts file is provided"*，并说明**后续 SDK 版本会强制校验**。当前仅警告，但应补 `librustdesk_ohos.d.ts`
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
+- [x] **打包接入 HAP：端到端链路打通** ✅
+  - 部署脚本 `flutter/ohos/build_bridge.ps1`（构建 + 部署；`.so` 为构建产物、已 gitignore）
+  - ArkTS 门面 `entry/src/main/ets/platform/RustDeskBridge.ets`：以带类型的 `interface` 镜像 NAPI 成员，页面不直接碰原始 import
+  - `hvigorw assembleHap` → **BUILD SUCCESSFUL**，`CompileArkTS` 通过（即 `.so` import 被接受并类型检查）
+  - HAP 实测 **2.54 MB**，内含 `libs/arm64-v8a/librustdesk_ohos.so`（2118 KB）
+  - ⚠️ **关键坑（已修正并写入脚本注释）**：预编译 `.so` 必须放在**模块根 `entry/libs/<abi>/`**；放在 `entry/src/main/libs/<abi>/` 会**编译通过但被静默排除出 HAP**，导致"构建成功、真机加载失败"
 - [x] **打包接入 HAP：端到端链路打通** ✅
   - 部署脚本 `flutter/ohos/build_bridge.ps1`（构建 + 部署；`.so` 为构建产物、已 gitignore）
   - ArkTS 门面 `entry/src/main/ets/platform/RustDeskBridge.ets`：以带类型的 `interface` 镜像 NAPI 成员，页面不直接碰原始 import
@@ -181,7 +191,18 @@
 
 ## 5. 关键技术难点
 
-1. **屏幕采集/被控**：本机 SDK 无 `@ohos.multimedia.avScreenCapture`（system 级），对标 iOS ReplayKit，需特殊权限，后置。
+1. **屏幕采集/被控（已更正，原判断有误）**：
+   - 原写「本机 SDK 无 `@ohos.multimedia.avScreenCapture`（system 级），该 API 不存在」——**这是错的**。
+     实测：`media.createAVScreenCaptureRecorder()` / `AVScreenCaptureRecorder` **确实存在**，
+     定义在 `@ohos.multimedia.media.d.ts`，**自 API 12 起为公开 API**，
+     标注 `@syscap SystemCapability.Multimedia.Media.AVScreenCapture`，**函数上没有 `@permission` 标注**；
+     权限表中有 `ohos.permission.CAPTURE_SCREEN`(API 7)、`CAPTURE_SCREEN_ALL`(13)、
+     `EXEMPT_CAPTURE_SCREEN_AUTHORIZE`(15)，最后一项的存在说明常规流程是**系统授权弹窗**而非仅系统应用可用。
+   - 因此**真实的限制**是：① 该 syscap 并非所有设备都有（hvigor 已给出 "not supported on all devices" 警告）；
+     ② 需要走屏幕采集授权流程；③ 被控端仍属高风险能力，且对标 iOS 同为后置。
+   - 现有 `ScreenCaptureBridge.ets` 的**真实缺陷**是：`init` 用了 `fd: 0`（无意义）、
+     未做 syscap 检查、未处理授权与错误分支。
+   - 结论不变（**被控/屏幕采集后置**），但**理由要改**：不是"平台没有 API"，而是"需授权流程 + 设备能力差异 + 产品定位裁剪"。
 2. **输入注入**：控制端只"发送"输入（走网络），不受限；被控端才需本机注入（受限）。
 3. **Rust 交叉编译**：需 `rust-ohos` 目标（OpenHarmony SIG），musl libc，部分 crate 可能需 patch。
 4. **后台保活**：`KEEP_BACKGROUND_RUNNING`。

@@ -68,13 +68,38 @@ $hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains
 
 | # | 位置 | 期望 | 说明 |
 |---|---|---|---|
-| **V1** | 设置 → 系统信息 | **核心版本** 显示 `1.5.0`（非 `—`） | 证明 `librustdesk_ohos.so` **已加载**且 NAPI 调用通 |
+| **V1** | 设置 → 系统信息 | **核心版本** 显示 `1.5.0`（非 `—`） | ✅ **可靠的加载测试**：`mainGetVersion()` 返回编译期常量 `VERSION`，与核心是否初始化无关。显示 `—` 就说明 `.so` 没装载 |
 | **V2** | 设置 → 系统信息 | **桥接版本** 显示 `1.5.0` | 证明桥接 crate 自身可用 |
-| **V3** | 远程页 → 本机设备 ID | 显示**9 位真实 ID**（形如 `123 456 789`），且**冷启动后保持不变** | 这是从核心读的 `mainGetMyId()`；**旧代码是本地随机数，每次都会变** |
+| **V3** | 远程页 → 本机设备 ID | ⚠️ **见下方"重要说明"，此项目前不能作为判定依据** | 核心**未初始化**，ID 可能为空或每次冷启动都变 |
 | **V4** | 首页任一操作 | 不闪退 | 证明没有跨 NAPI 边界 panic |
 | **V5** | 折叠屏（若有）/ 平板 / 横屏 | 旋转或折叠（展开↔折叠）时，导航**从底栏切到侧栏**、内容重排且**不重建页面** | 断点自适应（`sm<600 / md 840 / lg 1440`） |
 | **V6** | 系统切**深色模式** | 全界面跟随（背景/文字/卡片） | `dark` 限定词资源生效 |
 | **V7** | 系统语言切换 / 英文机 | 界面文案跟随（中文 base / `en_US`） | i18n 资源生效 |
+
+> ### ⚠️ 重要说明：V3 目前不可作为判定依据（审核发现）
+>
+> ArkTS 侧**只调用了 `mainGetMyId()`，没有调用任何核心生命周期**
+> （`mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir` 均未导出、未调用）。
+> 而 `mainGetMyId()` → `Config::get_id()` 依赖配置已加载：
+>
+> ```rust
+> // hbb_common/src/config.rs
+> pub fn get_id() -> String {
+>     let mut id = CONFIG.read().unwrap().id.clone();
+>     if id.is_empty() {
+>         if let Some(tmp) = Config::gen_id() { id = tmp; Config::set_id(&id); }
+>     }
+>     id
+> }
+> ```
+>
+> 未初始化时 `CONFIG` 为默认空值 → 走 `gen_id()`；而本仓库为 ohos 打的补丁让 `gen_id()`
+> 落到**随机数**分支。结果可能是：**ID 为空**，或**每次冷启动都不同**
+> —— 后者恰好与"旧代码本地随机数"的症状**无法区分**，会得出错误结论。
+>
+> **所以请不要用 V3 判断"ID 是否来自核心"。** 真正的判定请看日志：
+> `hdc hilog | Select-String "Failed to get machine uid"` 之类，或在 `mainInit` 接通后重测。
+> 修复方式是导出并调用核心初始化序列（P2 未完项），见 `PLAN.md`。
 
 **失败时最有用的一条**：若 V1 显示 `—`，说明 `.so` 没装载 —— 先查
 HAP 里有没有它：
