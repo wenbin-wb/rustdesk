@@ -133,6 +133,11 @@
   - 已接入：`mainGetOptionsSync`、`mainGetAppNameSync`、`mainUriPrefixSync`、`mainGetLoginDeviceInfo`、`getLocalKbLayoutType`、`mainGetOptionSync(key)`、`mainGetPeerSync(id)`、`getNextTextureKey`、`peerGetSessionsCount(id, connType)`
   - 产物 `librustdesk_ohos.so` **2.05 MB**，实测 **25/25 导出符号全部在位**
 - [ ] 第三批：`SessionID` 族（`session_*`）—— 需先定 ArkTS 侧会话标识（建议透传 UUID 串，与 Flutter 侧一致）
+- [x] **第三批：`SessionID` 族** ✅
+  - **约定**：核心的 `SessionID` 是 `uuid::Uuid`；ArkTS 无此类型，故**以标准连字符 UUID 串传递**（与 Flutter 侧一致，便于日志/交叉引用统一）
+  - 解析失败**不 panic**（跨 NAPI 边界 panic 会终止应用），而是走"会话不存在"的负结果分支
+  - 已接入：`sessionIsMultiUiSession`、`sessionGetIsRecording`、`sessionGetEnableTrustedDevices`、`willSessionCloseCloseSession`、`sessionIsKeyboardModeSupported(id,mode)`、`sessionGetToggleOptionSync(id,arg)`、`sessionGetReverseMouseWheelSync(id)`
+  - 产物 `librustdesk_ohos.so` **2.07 MB**，实测 **32/32 导出符号全部在位**
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
 - [ ] 打包为 HAR 并接入 HAP：`librustdesk_ohos.so` → `entry/src/main/libs/arm64-v8a/`

@@ -172,3 +172,85 @@ pub fn get_next_texture_key() -> i32 {
 pub fn peer_get_sessions_count(id: String, conn_type: i32) -> u32 {
     librustdesk::flutter_ffi::peer_get_sessions_count(id, conn_type).0 as u32
 }
+
+// --- session family -----------------------------------------------------------
+//
+// The core identifies a session by `SessionID`, which is `uuid::Uuid`. ArkTS has no
+// equivalent type, so the agreed representation is the canonical hyphenated UUID string
+// -- the same value the Flutter side carries, which keeps logs and any cross-referencing
+// identical between the two front ends.
+//
+// A malformed id is a programming error on the caller's side, not a recoverable state, but
+// panicking across the N-API boundary would abort the app. So parsing failures are turned
+// into the same value the core uses for "this session does not exist": the functions below
+// all look the id up and return their negative result when nothing matches.
+
+/// Parse the ArkTS-facing session id, or `None` if it is not a UUID.
+fn parse_session(id: &str) -> Option<uuid::Uuid> {
+    uuid::Uuid::parse_str(id).ok()
+}
+
+/// Whether the session spans more than one UI window.
+#[napi(js_name = "sessionIsMultiUiSession")]
+pub fn session_is_multi_ui_session(session_id: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_is_multi_ui_session(id).0,
+        None => false,
+    }
+}
+
+/// Whether the session is currently being recorded.
+#[napi(js_name = "sessionGetIsRecording")]
+pub fn session_get_is_recording(session_id: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_get_is_recording(id).0,
+        None => false,
+    }
+}
+
+/// Whether the peer allows trusted devices for this session.
+#[napi(js_name = "sessionGetEnableTrustedDevices")]
+pub fn session_get_enable_trusted_devices(session_id: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_get_enable_trusted_devices(id).0,
+        None => false,
+    }
+}
+
+/// Whether closing the window will also close the session.
+#[napi(js_name = "willSessionCloseCloseSession")]
+pub fn will_session_close_close_session(session_id: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::will_session_close_close_session(id).0,
+        None => false,
+    }
+}
+
+/// Whether the peer supports the given keyboard mode.
+#[napi(js_name = "sessionIsKeyboardModeSupported")]
+pub fn session_is_keyboard_mode_supported(session_id: String, mode: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_is_keyboard_mode_supported(id, mode).0,
+        None => false,
+    }
+}
+
+/// Read a boolean session toggle by name.
+#[napi(js_name = "sessionGetToggleOptionSync")]
+pub fn session_get_toggle_option_sync(session_id: String, arg: String) -> bool {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_get_toggle_option_sync(id, arg).0,
+        None => false,
+    }
+}
+
+/// The session's reverse-mouse-wheel setting, empty when unset or unknown.
+#[napi(js_name = "sessionGetReverseMouseWheelSync")]
+pub fn session_get_reverse_mouse_wheel_sync(session_id: String) -> String {
+    match parse_session(&session_id) {
+        Some(id) => librustdesk::flutter_ffi::session_get_reverse_mouse_wheel_sync(id)
+            .0
+            .unwrap_or_default(),
+        None => String::new(),
+    }
+}

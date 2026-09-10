@@ -7262,6 +7262,7 @@ dependencies = [
  "napi-derive-ohos",
  "napi-ohos",
  "rustdesk",
+ "uuid",
 ]
 
 [[package]]

@@ -23,5 +23,10 @@ rustdesk = { path = "../../../", features = ["flutter"] }
 napi-ohos = { version = "1", default-features = false, features = ["napi8"] }
 napi-derive-ohos = "1"
 
+# The core identifies a session by uuid::Uuid (hbb_common's `pub type SessionID`). ArkTS
+# has no such type, so the bridge takes the canonical UUID string and parses it. Pinned to
+# the same major the workspace uses so the type unifies rather than duplicating.
+uuid = { version = "1", features = ["v4"] }
+
 [build-dependencies]
 napi-build-ohos = "1"
