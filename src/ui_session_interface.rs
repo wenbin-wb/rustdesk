@@ -1479,7 +1479,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::ElevateWithLogon(username, password));
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios", not(feature = "flutter")))]
+    // ohos takes the no-op stub like the other mobile targets: switching sides needs the
+    // host/server side, which the HarmonyOS client does not build.
+    #[cfg(any(
+        target_os = "android",
+        target_os = "ios",
+        target_env = "ohos",
+        not(feature = "flutter")
+    ))]
     pub fn switch_sides(&self) {}
 
     #[cfg(feature = "flutter")]

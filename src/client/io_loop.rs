@@ -430,7 +430,7 @@ impl<T: InvokeUiSession> Remote<T> {
             .unwrap()
             .set_disconnected(round);
 
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
         if self.handler.is_default() && _set_disconnected_ok {
             Client::try_stop_clipboard();
         }
@@ -538,6 +538,10 @@ impl<T: InvokeUiSession> Remote<T> {
         {
             return None;
         }
+        // HarmonyOS records voice calls through the native audio stack instead, which is
+        // not bridged yet, so there is no in-process recorder to start.
+        #[cfg(target_env = "ohos")]
+        return None;
         // iOS does not have this server. Neither does HarmonyOS, which likewise builds
         // without the host side.
         #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
@@ -1453,7 +1457,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.check_clipboard_file_context();
                         if self.handler.is_default() {
                             #[cfg(feature = "flutter")]
-                            #[cfg(not(target_os = "ios"))]
+                            #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
                             let rx = Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]

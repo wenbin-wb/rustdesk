@@ -2277,6 +2277,11 @@ impl AudioHandler {
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
+                // HarmonyOS has no audio output backend here yet: the linux variant needs
+                // PulseAudio and the fallback needs cpal, which the ohos target does not
+                // link. Playback will go through the native HarmonyOS audio stack (P4);
+                // until then the stream is decoded and dropped rather than played.
+                #[cfg(not(target_env = "ohos"))]
                 allow_err!(self.start_audio(f));
             }
             Err(err) => {

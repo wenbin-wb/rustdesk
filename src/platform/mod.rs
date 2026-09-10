@@ -49,7 +49,9 @@ pub fn is_xfce() -> bool {
     {
         return std::env::var_os("XDG_CURRENT_DESKTOP") == Some(std::ffi::OsString::from("XFCE"));
     }
-    #[cfg(not(target_os = "linux"))]
+    // Mirrors the branch above rather than testing target_os = "linux" again: ohos is
+    // also target_os = "linux" but has no XFCE.
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         return false;
     }

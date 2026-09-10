@@ -192,6 +192,11 @@ pub fn use_texture_render() -> bool {
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) != "N";
 
+    // ohos takes the software path for now, like the other mobile targets. The native
+    // XComponent/texture renderer is wired up in P4.
+    #[cfg(target_env = "ohos")]
+    return false;
+
     #[cfg(target_os = "windows")]
     {
         if !cfg!(feature = "flutter") {
@@ -736,7 +741,9 @@ pub fn get_error() -> String {
 pub fn is_login_wayland() -> bool {
     #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     return crate::platform::linux::is_login_wayland();
-    #[cfg(not(target_os = "linux"))]
+    // Mirrors the branch above rather than testing target_os = "linux": ohos shares that
+    // target_os but has no Wayland.
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     return false;
 }
 
@@ -744,7 +751,7 @@ pub fn is_login_wayland() -> bool {
 pub fn current_is_wayland() -> bool {
     #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     return crate::platform::linux::current_is_wayland();
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     return false;
 }
 
@@ -1489,7 +1496,7 @@ pub fn option_synced() -> bool {
 }
 
 #[cfg(any(target_os = "android", feature = "flutter"))]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub(crate) async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {

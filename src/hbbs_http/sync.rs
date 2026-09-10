@@ -107,7 +107,12 @@ async fn start_hbbs_sync_async() {
                 if config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
+                // HarmonyOS has no ipc bridge, so there are never any local connections to
+                // report; the rest of this heartbeat handles an empty list fine.
+                #[cfg(not(target_env = "ohos"))]
                 let conns = Connection::alive_conns();
+                #[cfg(target_env = "ohos")]
+                let conns: Vec<i32> = Vec::new();
                 if info_uploaded.uploaded && (url != info_uploaded.url || id != info_uploaded.id) {
                     info_uploaded.uploaded = false;
                     *PRO.lock().unwrap() = false;

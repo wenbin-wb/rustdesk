@@ -584,9 +584,7 @@ impl FlutterHandler {
                 }
             }
             if push {
-                if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Event(out.clone()));
-                }
+                push_ui_event(&session.event_stream, EventToUI::Event(out.clone()));
             }
         }
     }
@@ -862,9 +860,7 @@ impl InvokeUiSession for FlutterHandler {
         }
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
-                if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Texture(display, true));
-                }
+                push_ui_event(&session.event_stream, EventToUI::Texture(display, true));
             }
         }
     }
@@ -1199,8 +1195,7 @@ impl FlutterHandler {
                     continue;
                 }
             }
-            if let Some(stream) = &h.event_stream {
-                stream.add(EventToUI::Rgba(display));
+            if push_ui_event(&h.event_stream, EventToUI::Rgba(display)) {
                 is_sent = true;
             }
         }
@@ -1229,9 +1224,7 @@ impl FlutterHandler {
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if use_texture_render || session.displays.len() > 1 {
                 if session.renderer.on_rgba(display, rgba) {
-                    if let Some(stream) = &session.event_stream {
-                        stream.add(EventToUI::Texture(display, false));
-                    }
+                    push_ui_event(&session.event_stream, EventToUI::Texture(display, false));
                 }
             }
         }
@@ -1398,9 +1391,32 @@ pub fn session_start_(
 
 #[inline]
 fn try_send_close_event(event_stream: &Option<StreamSink<EventToUI>>) {
-    if let Some(stream) = &event_stream {
-        stream.add(EventToUI::Event("close".to_owned()));
+    push_ui_event(event_stream, EventToUI::Event("close".to_owned()));
+}
+
+/// Deliver one UI event to the front end, reporting whether it was accepted.
+///
+/// On the Flutter targets this goes through flutter_rust_bridge's `StreamSink`, whose
+/// `add` needs the `IntoIntoDart` impl that `flutter_rust_bridge_codegen` emits into
+/// `bridge_generated.rs`. HarmonyOS has no Dart isolate and does not link that codegen
+/// output (see PLAN.md), so events will be delivered over the ohos-rs channel instead.
+/// Until that lands this is a no-op that still reports acceptance: the call sites use the
+/// result to decide whether a frame must travel by another route, so returning "not sent"
+/// would make them take a path meant for a missing front end.
+#[cfg(not(target_env = "ohos"))]
+fn push_ui_event(stream: &Option<StreamSink<EventToUI>>, event: EventToUI) -> bool {
+    match stream {
+        Some(s) => {
+            s.add(event);
+            true
+        }
+        None => false,
     }
+}
+
+#[cfg(target_env = "ohos")]
+fn push_ui_event(stream: &Option<StreamSink<EventToUI>>, _event: EventToUI) -> bool {
+    stream.is_some()
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -1410,7 +1426,12 @@ pub fn update_text_clipboard_required() {
         .any(|s| s.is_default() && s.is_text_clipboard_required());
     #[cfg(target_os = "android")]
     let _ = scrap::android::ffi::call_clipboard_manager_enable_client_clipboard(is_required);
+    // The flag drives the arboard-based clipboard listener, which the ohos build does not
+    // link; the native pasteboard bridge will serve it instead (P4).
+    #[cfg(not(target_env = "ohos"))]
     Client::set_is_text_clipboard_required(is_required);
+    #[cfg(target_env = "ohos")]
+    let _ = is_required;
 }
 
 #[cfg(feature = "unix-file-copy-paste")]

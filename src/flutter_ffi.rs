@@ -1245,7 +1245,9 @@ pub fn main_set_local_option(key: String, value: String) {
 // 1. For get, the value is stored in the server process.
 // 2. For clear, we need to need to return the error mmsg from the server process to flutter.
 pub fn main_handle_wayland_screencast_restore_token(_key: String, _value: String) -> String {
-    #[cfg(not(target_os = "linux"))]
+    // Mirrors the branch below rather than testing target_os = "linux": ohos shares that
+    // target_os but has no Wayland.
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         return "".to_owned();
     }
@@ -2230,7 +2232,7 @@ pub fn cm_check_click_time(conn_id: i32) {
 pub fn cm_get_click_time() -> f64 {
     #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     return crate::ui_cm_interface::get_click_time() as _;
-    #[cfg(any(target_os = "ios"))]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     return 0 as _;
 }
 
@@ -2262,7 +2264,7 @@ pub fn cm_get_config(name: String) -> String {
             "".to_string()
         }
     }
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     {
         "".to_string()
     }
@@ -2540,7 +2542,8 @@ pub fn is_selinux_enforcing() -> SyncReturn<bool> {
     {
         SyncReturn(crate::platform::linux::is_selinux_enforcing())
     }
-    #[cfg(not(target_os = "linux"))]
+    // Mirrors the branch above: ohos is target_os = "linux" but has no SELinux.
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         SyncReturn(false)
     }
@@ -2673,7 +2676,7 @@ pub fn main_get_common(key: String) -> String {
     } else if key == "has-gnome-shortcuts-inhibitor-permission" {
         #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
         return false.to_string();
     } else if key == "gnome-monitor-layout-mode" {
         #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
@@ -2681,7 +2684,7 @@ pub fn main_get_common(key: String) -> String {
             Some(mode) => mode.as_str().to_owned(),
             None => String::new(),
         };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
         return String::new();
     } else if key == "permanent-password-set" {
         return ui_interface::is_permanent_password_set().to_string();

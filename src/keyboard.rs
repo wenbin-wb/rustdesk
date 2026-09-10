@@ -1449,6 +1449,14 @@ fn is_altgr(event: &Event) -> bool {
     } else {
         false
     }
+
+    // HarmonyOS shares target_os = "linux" with the desktop build but has no X11 key
+    // handling, so it needs its own arm; without it the cfg'd body would be empty.
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = event;
+        false
+    }
 }
 
 #[inline]
