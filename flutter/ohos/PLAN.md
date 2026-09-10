@@ -76,18 +76,37 @@
 - [x] 打通构建环境（见下方「进展日志」的 4 个构建阻塞）
 - [x] `hbb_common` 编译通过（共享核心：proto/网络/config/加密）✅
 - [x] `base` 编译通过（客户端核心）✅
-- [ ] `scrap` 编译通过（⚠️ 需 libvpx/aom/libyuv 交叉编译 + 采集后端决策）
+- [x] `scrap` 编译通过（方案 A：门控 VPX/AOM + libyuv + 采集后端 + camera）
 - [ ] 根 crate（`librustdesk.so`）编译通过
 - [ ] 平台实现：设备信息 / 剪贴板 / 文件系统 / 音频 / 屏幕采集(占位)
 
+> **待清理（P1 收尾统一处理）**：`scrap` 在 ohos 下产生 8 条 warning（5 处 unused import、1 处 unused_mut、2 处 unused 变量），
+> 均为上述门控的连带产物（这些符号在非 ohos 平台仍被使用）。因本机无法编译校验桌面端（scrap 桌面构建需 vcpkg 的
+> libyuv/vpx/aom），故暂不清理，待 P1 收尾集中处理，避免误伤非 ohos 路径。
+>
+> **P4 解码后端落点（已核实）**：iOS 的 H.264/H.265 解码是走 **`hwcodec` 特性**（VideoToolbox 后端），而非在
+> `codec.rs` 里写平台分支。⇒ ohos 的 `AVCodec` 后端应加在 **`hwcodec` crate** 内，这样 `codec.rs` 的
+> H264/H265 路径无需改动，与 iOS 架构一致。
+
 > **关键发现（P1 实测）**：`scrap` 与 libvpx/aom/libyuv 是**深度耦合**，不能只靠 cfg 门掉：
-> - `common/codec.rs`（1157 行）直接 `use crate::{aom::{AomDecoder,AomEncoder,AomEncoderConfig}, vpxcodec::{VpxDecoder,...}}`，`Decoder`/`Encoder`/`EncoderCfg` 都带 VPX/AOM 分支；
+> - `common/codec.rs`（1161 行）直接 `use crate::{aom::{AomDecoder,AomEncoder,AomEncoderConfig}, vpxcodec::{VpxDecoder,...}}`，`Decoder`/`Encoder`/`EncoderCfg` 都带 VPX/AOM 分支；
 > - `common/mod.rs` 的 `Frame::to()` 与 `GoogleImage::to()` 直接调用 libyuv 的 `I420ToRAW/I420ToARGB/I420ToABGR/I444ToARGB/I444ToABGR`；
 > - `PixelBuffer` 是**按平台**定义的（x11/dxgi/quartz/android 各一份），ohos 没有 → 需自建；
 > - 而**客户端**必须用到 `scrap::codec::Decoder`（`src/client.rs:3683`、`src/ui_session_interface.rs:536`、`src/ui_interface.rs:1168`）。
 >
 > ⇒ **ohos 必须提供一个 codec 后端**（镜像 android 的 `mediacodec` 模式，新建 `ohoscodec`），否则根 crate 无法编译。
 > 执行策略：**先最小实现（打通编译）→ P4 填入 HarmonyOS `AVCodec` 硬解 H.264/H.265**。
+
+> **架构对标（重要，已核实）**：**iOS 是纯控制端**——`src/lib.rs` 把 `mod server` 与 `mod rendezvous_mediator` 都用
+> `#[cfg(not(any(target_os = "ios")))]` 排除，且 `flutter_ffi.rs` 中所有 `rendezvous_mediator` 调用都带
+> `#[cfg(target_os = "android")]`。ohos 应对齐 iOS：**先做纯控制端**（无 host/被控）。
+> 连带影响：`Encoder`/`EncoderCfg` 与 `server/video_service.rs`、`server/connection.rs` 是 host 侧使用者，
+> 因此 codec 门控必须与 `server` 门控配套决策（二者耦合）。
+
+> **VPX/AOM 符号的替代方案权衡（执行时择优）**：
+> - 方案 A-1「门控 `codec.rs`」：约 14 处 VPX/AOM 分支需加 cfg，并连带决定 `server` 是否排除（iOS 先例支持排除）。
+> - 方案 A-2「shim 模块」：新增 `ohos` 版 `vpxcodec`/`aom`，但需复刻 ~28 个公开项 ×2，重复面大、易漂移。
+> - 结论：**采用 A-1**（改 `codec.rs` + 对齐 iOS 的 `server` 门控），shim 仅保留最小必要（若 EncoderCfg 形状需要）。
 
 ### P2 · N-API 桥接层
 - [ ] C++ napi 包装 `src/flutter_ffi.rs` C ABI

@@ -51,6 +51,7 @@ lazy_static::lazy_static! {
 
 pub const ENCODE_NEED_SWITCH: &'static str = "ENCODE_NEED_SWITCH";
 
+#[cfg(not(target_env = "ohos"))]
 #[derive(Debug, Clone)]
 pub enum EncoderCfg {
     VPX(VpxEncoderConfig),
@@ -61,6 +62,7 @@ pub enum EncoderCfg {
     VRAM(VRamEncoderConfig),
 }
 
+#[cfg(not(target_env = "ohos"))]
 pub trait EncoderApi {
     fn new(cfg: EncoderCfg, i444: bool) -> ResultType<Self>
     where
@@ -86,10 +88,12 @@ pub trait EncoderApi {
     fn disable(&self);
 }
 
+#[cfg(not(target_env = "ohos"))]
 pub struct Encoder {
     pub codec: Box<dyn EncoderApi>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl Deref for Encoder {
     type Target = Box<dyn EncoderApi>;
 
@@ -98,6 +102,7 @@ impl Deref for Encoder {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl DerefMut for Encoder {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.codec
@@ -105,8 +110,11 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
+    #[cfg(not(target_env = "ohos"))]
     vp8: Option<VpxDecoder>,
+    #[cfg(not(target_env = "ohos"))]
     vp9: Option<VpxDecoder>,
+    #[cfg(not(target_env = "ohos"))]
     av1: Option<AomDecoder>,
     #[cfg(feature = "hwcodec")]
     h264_ram: Option<HwRamDecoder>,
@@ -126,6 +134,7 @@ pub struct Decoder {
     i420: Vec<u8>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[derive(Debug, Clone)]
 pub enum EncodingUpdate {
     Update(i32, SupportedDecoding),
@@ -134,6 +143,7 @@ pub enum EncodingUpdate {
     Check,
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl Encoder {
     pub fn new(config: EncoderCfg, i444: bool) -> ResultType<Encoder> {
         log::info!("new encoder: {config:?}, i444: {i444}");
@@ -504,6 +514,8 @@ impl Decoder {
 
     pub fn new(format: CodecFormat, _luid: Option<i64>) -> Decoder {
         log::info!("try create new decoder, format: {format:?}, _luid: {_luid:?}");
+        // No libvpx/libaom on ohos, so these bindings simply do not exist there.
+        #[cfg(not(target_env = "ohos"))]
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
         #[cfg(feature = "hwcodec")]
         let (mut h264_ram, mut h265_ram) = (None, None);
@@ -514,6 +526,7 @@ impl Decoder {
         let mut valid = false;
 
         match format {
+            #[cfg(not(target_env = "ohos"))]
             CodecFormat::VP8 => {
                 match VpxDecoder::new(VpxDecoderConfig {
                     codec: VpxVideoCodecId::VP8,
@@ -523,6 +536,7 @@ impl Decoder {
                 }
                 valid = vp8.is_some();
             }
+            #[cfg(not(target_env = "ohos"))]
             CodecFormat::VP9 => {
                 match VpxDecoder::new(VpxDecoderConfig {
                     codec: VpxVideoCodecId::VP9,
@@ -532,6 +546,7 @@ impl Decoder {
                 }
                 valid = vp9.is_some();
             }
+            #[cfg(not(target_env = "ohos"))]
             CodecFormat::AV1 => {
                 match AomDecoder::new() {
                     Ok(v) => av1 = Some(v),
@@ -591,6 +606,12 @@ impl Decoder {
                     valid = h265_media_codec.is_some();
                 }
             }
+            // HarmonyOS links no libvpx/libaom, so only the hardware formats above
+            // can be decoded there. The session negotiates H.264/H.265 accordingly.
+            #[cfg(target_env = "ohos")]
+            CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1 => {
+                log::error!("{format:?} decoder is not available on HarmonyOS");
+            }
             CodecFormat::Unknown => {
                 log::error!("unknown codec format, cannot create decoder");
             }
@@ -601,8 +622,11 @@ impl Decoder {
             log::info!("create {format:?} decoder success");
         }
         Decoder {
+            #[cfg(not(target_env = "ohos"))]
             vp8,
+            #[cfg(not(target_env = "ohos"))]
             vp9,
+            #[cfg(not(target_env = "ohos"))]
             av1,
             #[cfg(feature = "hwcodec")]
             h264_ram,
@@ -641,6 +665,7 @@ impl Decoder {
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
         match frame {
+            #[cfg(not(target_env = "ohos"))]
             video_frame::Union::Vp8s(vp8s) => {
                 if let Some(vp8) = &mut self.vp8 {
                     Decoder::handle_vpxs_video_frame(vp8, vp8s, rgb, chroma)
@@ -648,6 +673,7 @@ impl Decoder {
                     bail!("vp8 decoder not available");
                 }
             }
+            #[cfg(not(target_env = "ohos"))]
             video_frame::Union::Vp9s(vp9s) => {
                 if let Some(vp9) = &mut self.vp9 {
                     Decoder::handle_vpxs_video_frame(vp9, vp9s, rgb, chroma)
@@ -655,6 +681,7 @@ impl Decoder {
                     bail!("vp9 decoder not available");
                 }
             }
+            #[cfg(not(target_env = "ohos"))]
             video_frame::Union::Av1s(av1s) => {
                 if let Some(av1) = &mut self.av1 {
                     Decoder::handle_av1s_video_frame(av1, av1s, rgb, chroma)
@@ -713,6 +740,7 @@ impl Decoder {
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
+    #[cfg(not(target_env = "ohos"))]
     fn handle_vpxs_video_frame(
         decoder: &mut VpxDecoder,
         vpxs: &EncodedVideoFrames,
@@ -740,6 +768,7 @@ impl Decoder {
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
+    #[cfg(not(target_env = "ohos"))]
     fn handle_av1s_video_frame(
         decoder: &mut AomDecoder,
         av1s: &EncodedVideoFrames,
@@ -1040,7 +1069,7 @@ fn disable_av1() -> bool {
     std::mem::size_of::<usize>() == 4
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub fn test_av1() {
     use base::config::keys::OPTION_AV1_TEST;
     use hbb_common::rand::Rng;
