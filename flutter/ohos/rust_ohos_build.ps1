@@ -79,6 +79,23 @@ if (Test-Path $openssl) {
   $env:AARCH64_UNKNOWN_LINUX_OHOS_OPENSSL_DIR = $openssl
 }
 
+# libsodium for ohos is attached through [target.aarch64-unknown-linux-ohos] rustflags in
+# .cargo/config.toml, NOT through SODIUM_LIB_DIR.
+#
+# SODIUM_LIB_DIR is global, so setting it here would also redirect the HOST build, which
+# needs the libsodium-sys bundled mingw archive -- build.rs calls hbb_common::gen_version()
+# and hbb_common depends on sodiumoxide, so the host build script links libsodium too. The
+# host link then fails with undefined sodium_* symbols. See config.toml for the full note.
+#
+# This check only exists so a missing archive fails loudly here instead of at load time on
+# device, where it shows up as "sodium_base642bin: symbol not found" and a dead module.
+$sodium = "C:\ohos-libs\prefix-sodium\lib\libsodium.a"
+if (-not (Test-Path $sodium)) {
+  Write-Host "WARNING: cross-built libsodium not found at $sodium" -ForegroundColor Yellow
+  Write-Host "         Run flutter/ohos/build_libsodium_ohos.ps1 (and setup_ohos_toolchain.ps1" -ForegroundColor Yellow
+  Write-Host "         creates the C:\ohos-libs junction it is reached through)." -ForegroundColor Yellow
+}
+
 $cargoArgs = @()
 if ($Check)   { $cargoArgs += "check" } else { $cargoArgs += "build" }
 if ($Release) { $cargoArgs += "--release" }

@@ -39,6 +39,21 @@ rustflags = [
     # That directory cannot exist on a device and leaks the build host's layout into the
     # artifact, so turn it off for this target.
     "-C", "rpath=no",
+    # Link the libsodium cross-built for this target by
+    # flutter/ohos/build_libsodium_ohos.ps1.
+    #
+    # This is done with rustflags rather than SODIUM_LIB_DIR on purpose. libsodium-sys picks
+    # its archive by testing cfg!(windows), which is evaluated when its build script is
+    # COMPILED -- that is, against the HOST. On a Windows host it therefore always takes the
+    # bundled mingw/win64 branch, whatever the target is, so the target needs an explicit
+    # input. Setting SODIUM_LIB_DIR cannot substitute, because the variable is global: it
+    # would redirect the host build too, and the host needs its mingw archive because
+    # build.rs calls hbb_common::gen_version() and hbb_common depends on sodiumoxide.
+    #
+    # The archive is named by full path, not via -lsodium, so it cannot lose a search-order
+    # race with the unusable mingw archive: lld reports that archive's x86 members as
+    # "neither ET_REL nor LLVM bitcode", skips them, and resolves the symbols from here.
+    "-C", "link-arg=C:/ohos-libs/prefix-sodium/lib/libsodium.a",
 ]
 
 # To build for the DevEco emulator instead of a device, add the same block for

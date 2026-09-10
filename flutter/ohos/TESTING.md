@@ -118,48 +118,64 @@ $z.Entries | Where-Object { $_.FullName -match "\.so$" } | Select-Object FullNam
 
 ## 4.1 已实测：闪退根因与修复（2026-09-10 真机 LMR-AL10 / API 26）
 
-**症状**：装上后一启动就闪退，无 native crash。
+**症状**：装上后一启动就闪退，无 native crash，只有 `jscrash` 记录。
 
-**取崩溃详情**（这是唯一能看到 ArkTS 层异常的办法，`hilog` 里看不到）：
+**⚠️ 真正的根因在 hilog，不在崩溃堆栈里 —— 两者必须一起看。**
 
-```powershell
-$hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"
-# 先列出现有崩溃记录，取最新一条的文件名
-& $hdc shell "hidumper -s 1201 -a '-p Faultlogger'"
-# 再用 -f 取该条的完整内容
-& $hdc shell "hidumper -s 1201 -a '-p Faultlogger -f jscrash-com.carriez.flutter_hbb-20020392-20260910232709'"
-```
-
-**根因**：
+崩溃堆栈只给出**表象**：
 
 ```
 Reason: TypeError
 Error message: Cannot read property mainGetMyId of undefined
     at getMyId (entry/src/main/ets/platform/RustDeskBridge.ets:78:17)
-    at loadDeviceIdentity (entry/src/main/ets/components/RemoteTab.ets:54:17)
 ```
 
-`import nativeModule from 'librustdesk_ohos.so'` **不抛异常**，而是给出
-**`undefined`** —— 因为**缺少 `.d.ts` 类型声明**，鸿蒙无法解析该原生模块。
-hvigor 在编译期只给一条警告：
+hilog 才给出**底层原因**：
 
-> *Currently module for 'librustdesk_ohos.so' is not verified. If you're importing napi,
-> its verification will be enabled in later SDK version. Please make sure the corresponding
-> **.d.ts file is provided** and the napis are correctly declared.*
+```
+MUSL-LDSO: relocating failed: symbol not found.
+  dso=/data/storage/el1/bundle/libs/arm64/librustdesk_ohos.so s=sodium_base642bin
+MMG: [NMM:1439] load module default/rustdesk_ohos failed.
+ArkCompiler: export objects of native so is undefined
+```
 
-**修复**：`entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}` +
-`entry/oh-package.json5` 里声明 `"librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"`。
-**修复后应用能正常启动并驻留**，不再产生 jscrash。
+**取日志的正确姿势**：
+
+```powershell
+$hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"
+# ① ArkTS 层崩溃堆栈
+& $hdc shell "hidumper -s 1201 -a '-p Faultlogger'"
+& $hdc shell "hidumper -s 1201 -a '-p Faultlogger -f <上面列出的文件名>'"
+# ② 动态库加载失败原因（关键！崩溃堆栈里看不到）
+& $hdc shell hilog -x | Select-String "relocating failed|load module|export objects of native"
+```
+
+**根因**：`hbb_common → sodiumoxide → libsodium-sys`。`libsodium-sys 0.2.7` 没有该目标的
+预编译归档，**静默回退到打包内的 Windows 构建**（构建输出写着
+`cargo:rustc-link-search=native=.../libsodium-sys-0.2.7/mingw/win64/`）。那些是 **x86 目标文件**，
+lld 无法用于 aarch64，于是 `sodium_base642bin` 等符号悬空 → `dlopen` 失败 → 模块为 `undefined`
+→ ArkTS 抛 TypeError。
+
+**修复**：`build_libsodium_ohos.ps1` 交叉编译 libsodium；`.cargo/config.toml` 用
+**目标专属 rustflags** 以完整路径链入该归档。
+
+> ⚠️ **不要用 `SODIUM_LIB_DIR`**（我第一次就这么做，结果把 host 也弄坏了）。它是**全局**变量，
+> 会让 **host** 也去链 aarch64 归档；而 host 的 build script **也需要 libsodium**
+> （`build.rs:89` 调 `hbb_common::gen_version()`，hbb_common 依赖 sodiumoxide），
+> 于是 host 链接报 `undefined reference to sodium_base642bin`。
 
 **排除掉的假设**（不要再走一遍）：设备缺 `libace_napi.z.so`（SELinux 让 `ls` 对存在与否都报
-"No such file"，该检查不可靠）；libc++ ABI 不匹配；RUNPATH 含构建机路径。
+"No such file"，该检查本身不可靠）；libc++ ABI 不匹配；RUNPATH 含构建机路径；
+**以及"缺 `.d.ts`"** —— `.d.ts` 确实该补（hvigor 警告、后续 SDK 会强制校验），
+但补完**仍然闪退**，报错完全相同，所以它**不是**根因。
 
 **隔离实验手法**（定位"是原生模块还是 UI"极有效）：临时把 `RustDeskBridge.ets`
 换成不导入 `.so` 的同名桩函数，重新打包运行 —— 桩版能跑而真实版崩，即可确定问题在 `.so` 导入。
 
-> **机器可读的通用教训**：ArkTS 层异常（`jscrash`）在 `hilog` 里**看不到堆栈**，
-> 必须用 `hidumper -s 1201 -a '-p Faultlogger'`。且 `aa start` 会因
-> **设备锁屏**而失败（`Error Code:10106102`），与代码无关，测试前请先解锁。
+> **两条通用教训**：
+> ① ArkTS 层异常（`jscrash`）在 `hilog` 里**看不到堆栈**，要用
+> `hidumper -s 1201 -a '-p Faultlogger'`；反过来，**动态库加载失败在崩溃堆栈里看不到，要看 hilog**。
+> ② `aa start` 会因**设备锁屏**失败（`Error Code:10106102`），与代码无关，测试前先解锁。
 
 ---
 

@@ -141,21 +141,43 @@
 - [ ] 🔴 **核心生命周期未接通（审核发现的 P2 阻塞项）**
   - ArkTS 侧只调了读取接口，**未调用 `mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir`**，故 `Config::get_id()` 在未初始化状态下会落到 `gen_id()` 的随机分支 → 设备 ID 可能为空或每次冷启动都变（与旧 mock 症状无法区分）
   - 需：桥接导出上述 4 个接口 → `EntryAbility` 启动时用应用沙盒目录调用 → 再让 `getMyId()` 有真实意义
-- [x] **NAPI 模块的 `.d.ts` 类型声明** ✅ —— **真机闪退的根因就是缺这个文件**
-  - 真机崩溃日志（`hidumper -s 1201 -a '-p Faultlogger -f <file>'`）给出确切原因：
-    ```
-    Reason: TypeError
-    Error message: Cannot read property mainGetMyId of undefined
-        at getMyId (entry/src/main/ets/platform/RustDeskBridge.ets:78:17)
-    ```
-  - 即 `import nativeModule from 'librustdesk_ohos.so'` **不抛异常**，而是 **`nativeModule === undefined`**
-    —— 正是 hvigor 警告 *"module ... is not verified ... make sure the corresponding .d.ts file is provided"* 的实际后果
-  - 修复：新增 `entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}`（33 个成员），
+- [x] **NAPI 模块的 `.d.ts` 类型声明**（应做，但**不是**闪退根因 —— 见下一条）
+  - hvigor 警告 *"module for 'librustdesk_ohos.so' is not verified ... make sure the corresponding
+    `.d.ts` file is provided"*，且说明后续 SDK 会强制校验
+  - 已新增 `entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}`（33 个成员），
     并在 `entry/oh-package.json5` 加 `"librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"`
   - ⚠️ **坑**：类型声明**不能放 `entry/src/main/cpp/` 下** —— 该目录一旦存在，hvigor 会认为有 CMake 原生工程，
     报 `externalNativeOptions/path does not exist`。放 `src/main/types/` 即可
-  - 排除过程（记录以免重走）：曾怀疑 ① 设备缺 `libace_napi.z.so` ② libc++ ABI 版本不匹配 ③ RUNPATH 污染，
-    **均非根因**。用"临时把 `RustDeskBridge.ets` 换成无 `.so` 导入的桩"做隔离实验，确认崩溃只随 `.so` 导入出现
+  - ❌ **更正**：此处曾写"真机闪退的根因就是缺这个文件"，**该结论是错的**。加完 `.d.ts` 后应用**仍然闪退**，
+    报错完全相同。真正根因见下条（libsodium），而 `nativeModule === undefined` 只是"原生模块加载失败"的表象
+- [x] **真机闪退真正根因：libsodium 链接了错误架构的库** ✅ 已修复
+  - 决定性证据来自 **hilog**（`.d.ts` 那条 TypeError 只是表象，hilog 才有底层原因）：
+    ```
+    MUSL-LDSO: relocating failed: symbol not found.
+      dso=/data/storage/el1/bundle/libs/arm64/librustdesk_ohos.so s=sodium_base642bin
+    MMG: [NMM:1439]key:default/rustdesk_ohos First: failed Error relocating ... symbol not found.
+      Second: load module default/rustdesk_ohos failed.
+    ArkCompiler: export objects of native so is undefined, so name is @normalized:Y&&&librustdesk_ohos.so&
+    ```
+  - **根因**：`hbb_common → sodiumoxide → libsodium-sys` 是协议核心加密（secretbox/sign/base64），
+    **无法按特性裁剪**。而 `libsodium-sys 0.2.7` **只提供桌面三元的预编译归档**，对它不认识的目标会
+    **回退到打包内的 Windows 构建**——构建输出直接写着：
+    `cargo:rustc-link-search=native=.../libsodium-sys-0.2.7/mingw/win64/`
+    那些是 **x86 目标文件**（`ssse3`/`avx2`/`avx512f`），lld 无法用于 aarch64，于是
+    `sodium_base642bin` 等符号悬空 → 设备上 `dlopen` 失败 → 模块为 `undefined` → ArkTS 抛 TypeError
+  - ⚠️ **线索其实早就出现过**：链接期那条 `archive member '...ssse3.o' is neither ET_REL nor LLVM bitcode`
+    警告就是它，当时未深究
+  - **修复**：`flutter/ohos/build_libsodium_ohos.ps1` 用 clang 直接交叉编译 libsodium
+    （libsodium 无 CMake 工程、Windows 侧无 sh/make/perl 故 autotools 不可用；
+    源文件清单**以 libsodium 官方 `src/libsodium/Makefile.am` 为准**解析，只取可移植实现），
+    产出 `libsodium.a`（94 个源文件，0.43 MB），并校验 `sodium_base642bin` 已定义
+  - ⚠️ **链接方式的关键选择**：**不能**用 `SODIUM_LIB_DIR` —— 它是**全局**变量，会把 **host** 也重定向到
+    aarch64 归档，而 **host 的 build script 也需要 libsodium**（`build.rs:89` 调 `hbb_common::gen_version()`，
+    而 hbb_common 依赖 sodiumoxide）→ host 链接报 `undefined reference to sodium_base642bin`。
+    改用 `[target.aarch64-unknown-linux-ohos] rustflags`（**目标专属**）以**完整路径**追加该归档：
+    既避开 host，也不与 mingw 那份产生搜索顺序竞争
+  - 验证：`.so` 2.07 → **2.22 MB**，`llvm-readelf --dyn-syms` 显示 **sodium 符号已无未定义**
+  - 这是本项目第三次遇到**同类 host/target 混淆**（前两次：`machine-uid`、`magnum-opus`）
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
 - [x] **打包接入 HAP：端到端链路打通** ✅

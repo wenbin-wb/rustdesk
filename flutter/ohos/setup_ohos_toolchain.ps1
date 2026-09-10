@@ -232,6 +232,44 @@ if (Test-Path "$opusPrefix\lib\libopus.a") {
 }
 
 # ---------------------------------------------------------------------------
+Step "libsodium cross-compiled for ohos"
+# Required, not optional: hbb_common -> sodiumoxide -> libsodium-sys, and libsodium is the
+# protocol's crypto (secretbox/sign/base64) so it cannot be gated off. libsodium-sys has no
+# prebuilt archive for this triple and falls back to its bundled mingw/win64 build, whose
+# x86 objects lld cannot use; the module then fails to load on device with
+# "sodium_base642bin: symbol not found".
+$sodiumSrc = "$libsDir\libsodium-1.0.20"
+if (Test-Path "$libsDir\prefix-sodium\lib\libsodium.a") {
+  Skip "libsodium already built"
+} else {
+  if (-not (Test-Path "$sodiumSrc\src\libsodium\Makefile.am")) {
+    New-Item -ItemType Directory -Force -Path $libsDir | Out-Null
+    $stgz = "$libsDir\libsodium.tar.gz"
+    Write-Host "   downloading libsodium source" -ForegroundColor DarkGray
+    # The GitHub release asset is used rather than downloads.libsodium.org, which truncated
+    # the archive in testing.
+    Invoke-WebRequest -Uri "https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz" `
+      -OutFile $stgz -TimeoutSec 300 -UseBasicParsing
+    Remove-Item $sodiumSrc -Recurse -Force -ErrorAction SilentlyContinue
+    tar -xzf $stgz -C $libsDir
+    if (-not (Test-Path "$sodiumSrc\src\libsodium\Makefile.am")) { throw "libsodium extract failed" }
+  }
+  & pwsh -File (Join-Path $PSScriptRoot "build_libsodium_ohos.ps1") -NdkLink $NdkLink -WorkDir $libsDir
+  if ($LASTEXITCODE -ne 0) { throw "libsodium build failed" }
+}
+
+# ---------------------------------------------------------------------------
+Step "Stable junction for the cross-built libraries"
+# .cargo/config.toml attaches libsodium by absolute path, so it needs a location that does
+# not depend on the user profile name. Same reason the C:\ohos-ndk junction exists.
+if (Test-Path "C:\ohos-libs") {
+  Skip "C:\ohos-libs"
+} else {
+  New-Item -ItemType Junction -Path "C:\ohos-libs" -Target $libsDir | Out-Null
+  Ok "C:\ohos-libs -> $libsDir"
+}
+
+# ---------------------------------------------------------------------------
 Step "VCPKG_ROOT layout for opus"
 # magnum-opus builds the path as $VCPKG_ROOT/installed/<arch>-<os>, so arm64-linux must
 # exist and contain lib/ and include/.
