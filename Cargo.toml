@@ -73,7 +73,7 @@ default-net = "0.14"
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
-rdev = { git = "https://github.com/rustdesk-org/rdev" }
+rdev = { path = "libs/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
@@ -220,7 +220,9 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
-exclude = ["vdi/host"]
+# libs/nix and libs/rdev are vendored copies that declare their own [workspace] so they
+# build standalone; without excluding them here cargo reports multiple workspace roots.
+exclude = ["vdi/host", "libs/nix", "libs/rdev"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
@@ -240,6 +242,7 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # the SACK settle the rest (F-RTO), timed from the latest send, so a stall no longer resends the
 # whole backlog behind itself while a short lost tail still comes back at once.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "db3b07a9dd8f195916c89c2e62a8911402b11d27" }
 webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "db3b07a9dd8f195916c89c2e62a8911402b11d27" }
 # Vendored so the HarmonyOS build can exclude nix's glibc-only modules; see libs/nix.
 # nix reaches us only through webrtc-sctp -> webrtc-util, whose `ifaces` needs nothing

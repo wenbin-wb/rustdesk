@@ -29,8 +29,17 @@ $sysroot  = "$ndk\sysroot"
 $mingw    = "$env:USERPROFILE\mingw-tools\mingw64\bin"
 $openssl  = "$env:USERPROFILE\ohos-openssl\ohos-openssl-main\prelude\arm64-v8a"
 
-# mingw-w64 binutils (dlltool) is needed by the windows-gnu host toolchain.
+# mingw-w64 binutils (dlltool) is needed by the windows-gnu host toolchain, and its
+# headers/libs are needed to link the host build scripts.
 if (Test-Path $mingw) { $env:PATH = "$mingw;$env:PATH" }
+
+# bindgen (kcp-sys and friends) needs libclang; the OHOS NDK ships one.
+if (Test-Path "$llvm\libclang.dll") { $env:LIBCLANG_PATH = $llvm }
+
+# ...and it needs the target sysroot on its own command line, otherwise it cannot even
+# find stddef.h. bindgen reads these per-target before the generic variable.
+$env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=$sysroot"
+$env:BINDGEN_EXTRA_CLANG_ARGS = "--target=aarch64-linux-ohos --sysroot=$sysroot"
 
 # C/C++ cross compiler + archiver for the ohos target (used by build scripts).
 $env:CC_aarch64_unknown_linux_ohos  = "$llvm\clang.exe"
