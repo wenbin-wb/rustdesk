@@ -1572,13 +1572,13 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
 
 pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([("name", "theme"), ("dark", &dark)]));
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
 pub fn main_change_language(lang: String) {
     main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
@@ -1605,9 +1605,16 @@ pub fn main_is_option_fixed(key: String) -> SyncReturn<bool> {
 pub fn main_get_main_display() -> SyncReturn<String> {
     #[cfg(target_os = "ios")]
     let display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    // HarmonyOS reports no local display geometry here: the APIs below are the desktop
+    // screen enumeration backends. The session's display list comes from the peer.
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
+    let display_info = "".to_owned();
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    // Excluded on ohos: display_service enumerates screens through the platform backends
+    // (X11/Wayland/Quartz/DXGI), none of which exist on HarmonyOS. The remote display
+    // geometry the session needs comes from the peer's display message instead.
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     {
         #[cfg(not(target_os = "linux"))]
         let is_linux_wayland = false;
@@ -1648,11 +1655,11 @@ pub fn main_get_main_display() -> SyncReturn<String> {
 // No need to check if is on Wayland in this function.
 // The Flutter side gets display information on Wayland using a different method.
 pub fn main_get_displays() -> SyncReturn<String> {
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     let display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     if let Ok(displays) = crate::display_service::try_get_displays() {
         let displays = displays
             .iter()
@@ -2173,7 +2180,7 @@ pub fn main_get_mouse_time() -> f64 {
 
 pub fn main_wol(id: String) {
     // TODO: move send_wol outside.
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::lan::send_wol(id)
 }
 
@@ -2183,12 +2190,12 @@ pub fn main_create_shortcut(_id: String) {
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::send_chat(conn_id, msg);
 }
 
 pub fn cm_login_res(conn_id: i32, res: bool) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     if res {
         crate::ui_cm_interface::authorize(conn_id);
     } else {
@@ -2197,7 +2204,7 @@ pub fn cm_login_res(conn_id: i32, res: bool) {
 }
 
 pub fn cm_close_connection(conn_id: i32) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::close(conn_id);
 }
 
@@ -2211,24 +2218,24 @@ pub fn cm_close_connection_window(conn_id: i32) {
 }
 
 pub fn cm_remove_disconnected_connection(conn_id: i32) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::remove(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::check_click_time(conn_id)
 }
 
 pub fn cm_get_click_time() -> f64 {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     return crate::ui_cm_interface::get_click_time() as _;
     #[cfg(any(target_os = "ios"))]
     return 0 as _;
 }
 
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
 }
 
@@ -2237,7 +2244,7 @@ pub fn cm_can_elevate() -> SyncReturn<bool> {
 }
 
 pub fn cm_elevate_portable(conn_id: i32) {
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::elevate_portable(conn_id);
 }
 
@@ -2247,7 +2254,7 @@ pub fn cm_switch_back(conn_id: i32) {
 }
 
 pub fn cm_get_config(name: String) -> String {
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     {
         if let Ok(Some(v)) = crate::ipc::get_config(&name) {
             v
@@ -2451,7 +2458,7 @@ pub fn main_start_ipc_url_server() {
 }
 
 pub fn main_test_wallpaper(_second: u64) {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
     std::thread::spawn(move || match crate::platform::WallPaperRemover::new() {
         Ok(_remover) => {
             std::thread::sleep(std::time::Duration::from_secs(_second));

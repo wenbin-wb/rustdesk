@@ -86,6 +86,14 @@ pub fn get_active_username() -> String {
     "android".into()
 }
 
+// HarmonyOS, like Android, has no local account to report; the client runs in its own
+// sandbox. Kept separate from the Android arm so each can grow its own lookup later.
+#[cfg(target_env = "ohos")]
+pub fn get_active_username() -> String {
+    // TODO: read the signed-in HarmonyOS account once that capability is bridged.
+    "ohos".into()
+}
+
 #[cfg(target_os = "android")]
 pub const PA_SAMPLE_RATE: u32 = 48000;
 

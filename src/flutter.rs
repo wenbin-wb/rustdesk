@@ -1453,7 +1453,11 @@ fn send_clipboard_msg_impl(msg: Message, _is_file: bool, except_session_id: Opti
             continue;
         }
         if s.is_text_clipboard_required() {
-            // Check if the client supports multi clipboards
+            // Check if the client supports multi clipboards.
+            // Excluded on ohos: image/file clipboard formats come from arboard, which the
+            // HarmonyOS build does not link, so only the plain-text path is available
+            // there. Restoring the downgrade needs the native pasteboard bridge (P4).
+            #[cfg(not(target_env = "ohos"))]
             if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
                 let version = s.ui_handler.peer_info.read().unwrap().version.clone();
                 let platform = s.ui_handler.peer_info.read().unwrap().platform.clone();

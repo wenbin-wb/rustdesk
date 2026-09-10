@@ -429,7 +429,9 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        // Service install/uninstall is a desktop concept; HarmonyOS has no such service
+        // and the platform module provides none of these.
+        #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
@@ -445,7 +447,7 @@ pub fn set_option(key: String, value: String) {
             }
         }
     } else if &key == "audio-input" {
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
         crate::audio_service::restart();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
@@ -1197,9 +1199,17 @@ pub fn is_root() -> bool {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn check_super_user_permission() -> bool {
-    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+    // No privileged-service concept on HarmonyOS, so take the same branch as the other
+    // mobile targets.
+    #[cfg(all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        not(target_env = "ohos")
+    ))]
     return crate::platform::check_super_user_permission().unwrap_or(false);
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    #[cfg(not(all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        not(target_env = "ohos")
+    )))]
     return true;
 }
 
@@ -1629,9 +1639,9 @@ pub fn handle_relay_id(id: &str) -> &str {
 }
 
 pub fn support_remove_wallpaper() -> bool {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
     return crate::platform::WallPaperRemover::support();
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos"))))]
     return false;
 }
 

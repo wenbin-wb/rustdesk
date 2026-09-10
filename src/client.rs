@@ -1795,7 +1795,7 @@ impl Client {
 
     #[inline]
     #[cfg(feature = "flutter")]
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     pub fn set_is_text_clipboard_required(b: bool) {
         CLIPBOARD_STATE.lock().unwrap().is_text_required = b;
     }
@@ -1806,7 +1806,7 @@ impl Client {
         CLIPBOARD_STATE.lock().unwrap().is_file_required = b;
     }
 
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     fn try_stop_clipboard() {
         // Disconnected Flutter sessions may keep UI handlers alive, so only connected sessions
         // should block clipboard cleanup.

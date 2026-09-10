@@ -4,8 +4,11 @@ use std::{
     time::Duration,
 };
 
+// get_builtin_option is a plain lookup in the built-in option table, so it is available
+// on every target including ohos; only the ipc Connection is not.
+use crate::ui_interface::get_builtin_option;
 #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
-use crate::{ui_interface::get_builtin_option, Connection};
+use crate::Connection;
 use hbb_common::{
     config::{self, Config, LocalConfig},
     log,
