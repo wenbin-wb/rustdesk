@@ -327,7 +327,7 @@ fn ensure_cleanup_task() {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn get_terminal_session_count(include_zombie_tasks: bool) -> usize {
     let mut c = TERMINAL_SERVICES.lock().unwrap().len();
     if include_zombie_tasks {

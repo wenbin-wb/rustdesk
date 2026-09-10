@@ -1,4 +1,4 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::ipc::start_pa;
 use crate::ui_cm_interface::{start_ipc, ConnectionManager, InvokeUiCM};
 
@@ -96,7 +96,7 @@ impl Deref for SciterConnectionManager {
 
 impl SciterConnectionManager {
     pub fn new() -> Self {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         std::thread::spawn(start_pa);
         let cm = ConnectionManager {
             ui_handler: SciterHandler::default(),

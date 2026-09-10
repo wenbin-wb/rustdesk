@@ -155,7 +155,7 @@ async fn start_whiteboard_() -> ResultType<()> {
         #[allow(unused_assignments)]
         let mut args = vec!["--whiteboard"];
         #[allow(unused_mut)]
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut user = None;
 
         let run_done;
@@ -167,7 +167,7 @@ async fn start_whiteboard_() -> ResultType<()> {
                     log::debug!("Start whiteboard");
                     res = crate::platform::run_as_user(args.clone());
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     log::debug!("Start whiteboard");
                     res = crate::platform::run_as_user(

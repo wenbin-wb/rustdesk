@@ -95,13 +95,13 @@ mod pa_impl {
     pub async fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         RESTARTING.store(false, Ordering::SeqCst);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
         let mut encoder = Encoder::new(crate::platform::PA_SAMPLE_RATE, Stereo, LowDelay)?;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         allow_err!(
             stream
                 .send(&crate::ipc::Data::Config((
@@ -110,7 +110,7 @@ mod pa_impl {
                 )))
                 .await
         );
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         #[cfg(target_os = "android")]
         let mut android_data = vec![];
@@ -120,7 +120,7 @@ mod pa_impl {
                 Ok(())
             })?;
 
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             if let Ok(data) = stream.next_raw().await {
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);

@@ -185,7 +185,7 @@ fn active_uid_strict() -> Option<u32> {
     console_owner_uid()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn active_uid_strict() -> Option<u32> {
     let reported_uid_raw = crate::platform::linux::get_active_userid();
@@ -221,7 +221,7 @@ pub(crate) fn active_uid_cached() -> Option<u32> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
 pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         return peer_cred_from_fd(fd).map(|cred| cred.uid as u32);
     }
@@ -240,7 +240,7 @@ pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
 fn peer_pid_from_fd(fd: RawFd) -> Option<u32> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         return peer_cred_from_fd(fd).and_then(|cred| (cred.pid > 0).then_some(cred.pid as u32));
     }
@@ -265,7 +265,7 @@ fn peer_pid_from_fd(fd: RawFd) -> Option<u32> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn peer_cred_from_fd(fd: RawFd) -> Option<libc::ucred> {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
@@ -301,7 +301,7 @@ fn current_exe_canonical_path() -> ResultType<PathBuf> {
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn peer_exe_canonical_path_by_pid(peer_pid: u32) -> ResultType<PathBuf> {
     let proc_exe = PathBuf::from(format!("/proc/{peer_pid}/exe"));
@@ -504,7 +504,7 @@ pub(crate) fn ensure_peer_executable_matches_current_by_pid_opt(
     ensure_peer_executable_matches_current_by_pid(peer_pid, postfix)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(crate) fn ensure_peer_executable_matches_current_by_fd(
     fd: RawFd,
@@ -532,7 +532,7 @@ fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(crate) fn log_rejected_uinput_connection(
     postfix: &str,

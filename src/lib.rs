@@ -30,12 +30,21 @@ pub mod ipc;
 pub mod ui;
 mod version;
 pub use version::*;
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-mod bridge_generated;
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+// The mobile session layer (flutter::get_cur_session and the FlutterSession it hands
+// back) is what the client uses on every mobile target, so HarmonyOS takes the same path
+// as android/ios.
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter"))]
 pub mod flutter;
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter"))]
 pub mod flutter_ffi;
+// bridge_generated is flutter_rust_bridge codegen output and is checked in only for the
+// builds that regenerate it. HarmonyOS exposes its FFI through flutter_ffi and ohos-rs
+// instead, so it is excluded there.
+#[cfg(all(
+    any(target_os = "android", target_os = "ios", feature = "flutter"),
+    not(target_env = "ohos")
+))]
+mod bridge_generated;
 use common::*;
 mod auth_2fa;
 #[cfg(not(any(target_os = "ios", target_env = "ohos")))]

@@ -194,12 +194,12 @@ pub mod client {
 pub mod service {
     use super::*;
     use hbb_common::lazy_static;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     use parity_tokio_ipc::Connection as RawIpcConnection;
     use scrap::wayland::{
         pipewire::RDP_SESSION_INFO, remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop,
     };
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     use std::os::unix::io::AsRawFd;
     use std::{collections::HashMap, sync::Mutex};
 
@@ -937,7 +937,7 @@ pub mod service {
         });
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn authorize_uinput_peer(postfix: &str, stream: &RawIpcConnection) -> bool {
         if !hbb_common::config::is_service_ipc_postfix(postfix) {
             return true;
@@ -973,7 +973,7 @@ pub mod service {
                 while let Some(result) = incoming.next().await {
                     match result {
                         Ok(stream) => {
-                            #[cfg(target_os = "linux")]
+                            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                             if !authorize_uinput_peer(postfix, &stream) {
                                 continue;
                             }

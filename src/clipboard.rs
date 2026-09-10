@@ -1,6 +1,6 @@
 #[cfg(not(target_os = "android"))]
 use arboard::{ClipboardData, ClipboardFormat};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use arboard::{LinuxClipboardKind, SetExtLinux};
 use hbb_common::{bail, log, ResultType};
 use base::message_proto::*;
@@ -17,7 +17,7 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 pub const OPTION_ALLOW_SYNC_CLIPBOARD_BETWEEN_SESSIONS: &str =
     "allow-sync-clipboard-between-sessions";
 
-#[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios", target_env = "ohos"))))]
 pub fn is_sync_clipboard_between_sessions_enabled() -> bool {
     hbb_common::config::option2bool(
         OPTION_ALLOW_SYNC_CLIPBOARD_BETWEEN_SESSIONS,
@@ -84,7 +84,7 @@ pub fn check_clipboard(
     Some(msg)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn peek_clipboard(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -196,7 +196,7 @@ pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) -> Re
     }
     #[allow(unused_mut)]
     if let Some(mut ctx) = ctx.as_mut() {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             use clipboard::platform::unix;
             if unix::fuse::empty_local_files(_side == ClipboardSide::Client, _conn_id) {
@@ -291,7 +291,7 @@ fn append_owner_marker(mut data: Vec<ClipboardData>, side: ClipboardSide) -> Vec
     data
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn set_text_clipboard_with_owner_sync(text: &str, side: ClipboardSide) -> ResultType<()> {
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
@@ -326,7 +326,7 @@ impl ClipboardContext {
         {
             board = arboard::Clipboard::new()?;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             let mut i = 1;
             loop {
@@ -456,7 +456,7 @@ impl ClipboardContext {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn set_with_owner_marker_for_linux(&mut self, data: &[ClipboardData]) -> ResultType<()> {
         let _lock = ARBOARD_MTX.lock().unwrap();
         self.inner
@@ -518,7 +518,7 @@ impl ClipboardContext {
 
                 // Don't use `base::platform::linux::is_kde()` here.
                 // It's not correct in the server process.
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 let is_kde_x11 = base::platform::linux::is_kde_session()
                     && crate::platform::linux::is_x11();
                 #[cfg(target_os = "macos")]

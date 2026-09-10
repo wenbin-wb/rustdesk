@@ -5,7 +5,7 @@ mod server;
 
 #[cfg(target_os = "windows")]
 mod windows;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -16,7 +16,7 @@ mod win_linux;
 use windows::create_event_loop;
 #[cfg(target_os = "macos")]
 use macos::create_event_loop;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub use linux::is_supported;
 
 pub use client::*;

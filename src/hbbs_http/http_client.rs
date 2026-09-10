@@ -27,7 +27,7 @@ macro_rules! configure_http_client {
                 }
             }
             TlsType::Rustls => {
-                #[cfg(any(target_os = "android", target_os = "ios"))]
+                #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
                 match hbb_common::verifier::client_config($danger_accept_invalid_cert) {
                     Ok(client_config) => {
                         builder = builder.use_preconfigured_tls(client_config);
@@ -36,7 +36,7 @@ macro_rules! configure_http_client {
                         hbb_common::log::error!("Failed to get client config: {}", e);
                     }
                 }
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 {
                     builder = builder.use_rustls_tls();
                     if $danger_accept_invalid_cert {

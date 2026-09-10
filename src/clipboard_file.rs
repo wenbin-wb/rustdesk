@@ -227,10 +227,10 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
 #[cfg(feature = "unix-file-copy-paste")]
 pub mod unix_file_clip {
     use super::*;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     use crate::clipboard::update_clipboard_files;
     use crate::clipboard::{try_empty_clipboard_files, ClipboardSide};
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     use clipboard::platform::unix::fuse;
     use clipboard::platform::unix::{
         get_local_format, serv_files, FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME,
@@ -324,7 +324,7 @@ pub mod unix_file_clip {
                 // empty file list, send failure message
                 return vec![msg_resp_format_data_failure()];
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             ClipboardFile::FormatDataResponse {
                 msg_flags,
                 format_data,
@@ -387,7 +387,7 @@ pub mod unix_file_clip {
                 })
                 .collect::<_>();
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             ClipboardFile::FileContentsResponse {
                 msg_flags,
                 stream_id,

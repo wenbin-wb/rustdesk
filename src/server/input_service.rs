@@ -1,8 +1,8 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
 use crate::input::*;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::whiteboard;
 use base::message_proto::{
     pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate,
@@ -14,9 +14,9 @@ use hbb_common::{get_time, protobuf::EnumOrUnknown};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use scrap::wayland::pipewire::RDP_SESSION_INFO;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use std::sync::mpsc;
 use std::{
     convert::TryFrom,
@@ -111,7 +111,7 @@ struct Input {
 const KEY_CHAR_START: u64 = 9999;
 
 // XKB keycode for Insert key (evdev KEY_INSERT code 110 + 8 for XKB offset)
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const XKB_KEY_INSERT: u16 = evdev::Key::KEY_INSERT.code() + 8;
 
 #[derive(Clone, Default)]
@@ -181,7 +181,7 @@ impl LockModesHandler {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn sleep_to_ensure_locked(v: bool, k: enigo::Key, en: &mut Enigo) {
         if wayland_use_uinput() {
             // Sleep at most 500ms to ensure the lock state is applied.
@@ -205,7 +205,7 @@ impl LockModesHandler {
         let caps_lock_changed = event_caps_enabled != local_caps_enabled;
         if caps_lock_changed {
             en.key_click(enigo::Key::CapsLock);
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             Self::sleep_to_ensure_locked(event_caps_enabled, enigo::Key::CapsLock, &mut en);
         }
 
@@ -225,7 +225,7 @@ impl LockModesHandler {
         }
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             Self::sleep_to_ensure_locked(event_num_enabled, enigo::Key::NumLock, &mut en);
         }
 
@@ -267,7 +267,7 @@ impl Drop for LockModesHandler {
         // Do not change led state if is Wayland uinput.
         // Because there must be a delay to ensure the lock state is applied on Wayland uinput,
         // which may affect the user experience.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if wayland_use_uinput() {
             return;
         }
@@ -499,7 +499,7 @@ lazy_static::lazy_static! {
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref WAYLAND_CLIPBOARD_INPUT_RECORDS: Arc<Mutex<Vec<(Instant, String)>>> =
         Default::default();
@@ -651,7 +651,7 @@ static mut VIRTUAL_INPUT_STATE: Option<VirtualInputState> = None;
 // First call set_uinput() will create keyboard and mouse clients.
 // The clients are ipc connections that must live shorter than tokio runtime.
 // Thus this function must not be called in a temporary runtime.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     // Keyboard and mouse both open /dev/uinput
     // TODO: Make sure there's no race
@@ -673,7 +673,7 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     let mut en = ENIGO.lock()?;
     // Same as `setup_uinput`: the caller is gated on `wayland_use_rdp_input()`.
@@ -704,7 +704,7 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
@@ -726,7 +726,7 @@ pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32)
     .await?
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 async fn set_uinput_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     super::uinput::client::set_resolution(minx, maxx, miny, maxy).await
 }
@@ -852,7 +852,7 @@ pub fn fix_key_down_timeout_at_exit() {
 }
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn clear_remapped_keycode() {
     ENIGO.lock().unwrap().tfc_clear_remapped();
 }
@@ -1091,7 +1091,7 @@ pub fn handle_mouse_(
     if simulate {
         handle_mouse_simulation_(evt, conn);
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let evt_type = evt.mask & MOUSE_TYPE_MASK;
         // Relative (delta) mouse events do not include absolute coordinates, so
@@ -1150,7 +1150,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             // On Wayland with uinput, the client sends coordinates in the layout it was
             // told at session init. If the compositor has since moved a monitor, correct
             // them onto the current layout. https://github.com/rustdesk/rustdesk/issues/15601
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             let (mx, my) = if wayland_use_uinput() {
                 super::display_service::remap_wayland_uinput_coord(evt.x, evt.y)
             } else {
@@ -1287,7 +1287,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn handle_mouse_show_cursor_(evt: &MouseEvent, conn: i32, username: String, argb: u32) {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
@@ -1357,7 +1357,7 @@ pub fn is_enter(evt: &KeyEvent) -> bool {
 
 pub async fn lock_screen() {
     cfg_if::cfg_if! {
-    if #[cfg(target_os = "linux")] {
+    if #[cfg(all(target_os = "linux", not(target_env = "ohos")))] {
         // xdg_screensaver lock not work on Linux from our service somehow
         // loginctl lock-session also not work, they both work run rustdesk from cmd
         std::thread::spawn(|| {
@@ -1395,7 +1395,7 @@ pub async fn lock_screen() {
 }
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
@@ -1439,7 +1439,7 @@ pub fn reset_input_ondisconn() {
 fn sim_rdev_rawkey_position(code: KeyCode, keydown: bool) {
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let rawkey = RawKey::LinuxXorgKeycode(code);
     // // to-do: test android
     // #[cfg(target_os = "android")]
@@ -1537,7 +1537,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     crate::platform::windows::try_change_desktop();
 
     // Wayland
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if !crate::platform::linux::is_x11() {
         wayland_send_raw_key(evt.chr() as u16, evt.down);
         return;
@@ -1548,7 +1548,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
 /// Send raw keycode on Wayland via the active backend (uinput or RemoteDesktop portal).
 /// The keycode is expected to be a Linux keycode (evdev code + 8 for X11 compatibility).
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn wayland_send_raw_key(code: u16, down: bool) {
     let mut en = ENIGO.lock().unwrap();
@@ -1605,7 +1605,7 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
     fix_modifiers(&key_event.modifiers[..], en, ck_value);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn is_altgr_pressed() -> bool {
     let altgr_rawkey = RawKey::LinuxXorgKeycode(ControlKey::RAlt.value() as _);
     KEYS_DOWN
@@ -1620,7 +1620,7 @@ fn press_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Ke
     for ref ck in key_event.modifiers.iter() {
         if let Some(key) = control_key_value_to_key(ck.value()) {
             if !is_pressed(&key, en) {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 if key == Key::Alt && is_altgr_pressed() {
                     continue;
                 }
@@ -1663,7 +1663,7 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
     // On Wayland with uinput mode:
     // - ASCII printable: input via key events (custom keyboard path, e.g. portal keysym)
     // - Non-ASCII: input via clipboard paste
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         // Skip clipboard for hotkeys (Ctrl/Alt/Meta pressed)
         if !is_hotkey_modifier_pressed(en) {
@@ -1719,7 +1719,7 @@ fn process_unicode(en: &mut Enigo, chr: u32) {
     // On Wayland with uinput mode:
     // - ASCII printable: input via key sequence (custom keyboard path)
     // - Non-ASCII: input via clipboard paste
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         if let Ok(c) = char::try_from(chr) {
             if is_ascii_printable(c) {
@@ -1740,7 +1740,7 @@ fn process_seq(en: &mut Enigo, sequence: &str) {
     // On Wayland with uinput mode:
     // - pure ASCII printable sequence: input via key sequence (custom keyboard path)
     // - any non-ASCII present: input whole sequence via clipboard to preserve order
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         if sequence.chars().all(is_ascii_printable) {
             en.key_sequence(sequence);
@@ -1757,16 +1757,16 @@ fn process_seq(en: &mut Enigo, sequence: &str) {
 /// This is an empirical value — Wayland provides no callback or event to confirm
 /// clipboard content has been received by the compositor. Under heavy system load,
 /// this delay may be insufficient, but there is no reliable alternative mechanism.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const CLIPBOARD_SYNC_DELAY_MS: u64 = 50;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW: Duration = Duration::from_secs(1);
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS: usize = 256;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(super) const WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS: usize = 1024;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn cleanup_wayland_clipboard_input_records(records: &mut Vec<(Instant, String)>, now: Instant) {
     records.retain(|(created_at, _)| {
         now.saturating_duration_since(*created_at) <= WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW
@@ -1777,7 +1777,7 @@ fn cleanup_wayland_clipboard_input_records(records: &mut Vec<(Instant, String)>,
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn normalize_wayland_clipboard_input_text(text: &str) -> String {
     text.chars()
@@ -1785,7 +1785,7 @@ fn normalize_wayland_clipboard_input_text(text: &str) -> String {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn get_wayland_clipboard_input_normalized_text(text: &str) -> Option<String> {
     let normalized = normalize_wayland_clipboard_input_text(text);
@@ -1795,7 +1795,7 @@ fn get_wayland_clipboard_input_normalized_text(text: &str) -> Option<String> {
     Some(normalized)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn record_wayland_clipboard_input_for_sync_filter(text: &str) -> Option<(Instant, String)> {
     if text.is_empty() || crate::platform::linux::is_x11() {
@@ -1809,7 +1809,7 @@ fn record_wayland_clipboard_input_for_sync_filter(text: &str) -> Option<(Instant
     Some((now, normalized))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn rollback_wayland_clipboard_input_record(record: (Instant, String)) {
     let (created_at, normalized) = record;
@@ -1826,7 +1826,7 @@ fn rollback_wayland_clipboard_input_record(record: (Instant, String)) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(super) fn is_recent_wayland_clipboard_input(text: &str) -> bool {
     if text.is_empty() || crate::platform::linux::is_x11() {
         return false;
@@ -1844,7 +1844,7 @@ pub(super) fn is_recent_wayland_clipboard_input(text: &str) -> bool {
 
 /// Internal: Set clipboard content without delay.
 /// Returns true if clipboard was set successfully.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn set_clipboard_content(text: &str) -> bool {
     if let Err(e) = crate::clipboard::set_text_clipboard_with_owner_sync(
         text,
@@ -1865,7 +1865,7 @@ fn set_clipboard_content(text: &str) -> bool {
 /// Restoring clipboard could cause race conditions where subsequent keystrokes
 /// might accidentally paste the old clipboard content instead of the intended input.
 /// This trade-off prioritizes input reliability over preserving clipboard state.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(super) fn set_clipboard_for_paste_sync(text: &str) -> bool {
     let record = record_wayland_clipboard_input_for_sync_filter(text);
@@ -1880,14 +1880,14 @@ pub(super) fn set_clipboard_for_paste_sync(text: &str) -> bool {
 }
 
 /// Check if a character is ASCII printable (0x20-0x7E).
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(super) fn is_ascii_printable(c: char) -> bool {
     c as u32 >= 0x20 && c as u32 <= 0x7E
 }
 
 /// Input a single character via clipboard + Shift+Insert in server process.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn input_char_via_clipboard_server(en: &mut Enigo, chr: char) {
     input_text_via_clipboard_server(en, &chr.to_string());
@@ -1897,7 +1897,7 @@ fn input_char_via_clipboard_server(en: &mut Enigo, chr: char) {
 /// Shift+Insert is more universal than Ctrl+V, works in both GUI apps and terminals.
 ///
 /// Note: Clipboard content is NOT restored after paste - see `set_clipboard_for_paste_sync` for rationale.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn input_text_via_clipboard_server(en: &mut Enigo, text: &str) {
     if text.is_empty() {
         return;
@@ -1966,7 +1966,7 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
 /// character (e.g., Shift+a → 'A'), which is normal text input, not a hotkey.
 /// Shift is only relevant as a hotkey modifier when combined with Ctrl/Alt/Meta
 /// (e.g., Ctrl+Shift+Z), in which case this function already returns true via Ctrl.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn is_hotkey_modifier_pressed(en: &mut Enigo) -> bool {
     get_modifier_state(Key::Control, en)
@@ -1983,7 +1983,7 @@ fn is_hotkey_modifier_pressed(en: &mut Enigo) -> bool {
 ///
 /// Note: Does NOT release Shift if hotkey modifiers (Ctrl/Alt/Meta) are pressed,
 /// to preserve combinations like Ctrl+Shift+Z.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn release_shift_for_char_input(en: &mut Enigo) {
     // Don't release Shift if hotkey modifiers (Ctrl/Alt/Meta) are pressed.
     // This preserves combinations like Ctrl+Shift+Z.
@@ -2040,7 +2040,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
             // The character has already been converted by the client, so we should
             // input it directly without Shift modifier affecting the result.
             // Only Ctrl/Alt/Meta should be kept for hotkeys like Ctrl+C.
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             release_shift_for_char_input(&mut en);
 
             let record_key = chr as u64 + KEY_CHAR_START;
@@ -2049,7 +2049,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
         }
         Some(key_event::Union::Unicode(chr)) => {
             // Same as Chr: release Shift for Unicode input
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             release_shift_for_char_input(&mut en);
 
             process_unicode(&mut en, chr)
@@ -2079,7 +2079,7 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             //   clipboard is unreliable in root service context.
             // - rdp_input mode (--server): forward sequence to custom keyboard handler so
             //   ASCII can use Portal keysym and non-ASCII can use clipboard.
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             if !crate::platform::linux::is_x11() {
                 let mut en = ENIGO.lock().unwrap();
                 if wayland_use_rdp_input() {
@@ -2137,10 +2137,10 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             {
                 #[cfg(target_os = "windows")]
                 let simulate_win_hot_key = is_hot_key_modifiers_down(&mut en);
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 let simulate_win_hot_key = false;
                 if !simulate_win_hot_key {
-                    #[cfg(target_os = "linux")]
+                    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                     release_shift_for_char_input(&mut en);
                     #[cfg(target_os = "windows")]
                     {
@@ -2161,7 +2161,7 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
                     } else {
                         rdev::simulate_unicode(chr as _).ok();
                     }
-                    #[cfg(target_os = "linux")]
+                    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                     en.key_click(Key::Layout(chr));
                 }
             }
@@ -2169,7 +2169,7 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::Chr(..)) => {
             #[cfg(target_os = "windows")]
             translate_process_code(evt.chr(), evt.down);
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             {
                 if !crate::platform::linux::is_x11() {
                     // Wayland: use uinput to send raw keycode
@@ -2291,7 +2291,7 @@ fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn is_legacy_mode(evt: &KeyEvent) -> bool {
     evt.mode.enum_value_or(KeyboardMode::Legacy) == KeyboardMode::Legacy
 }
@@ -2301,9 +2301,9 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut _lock_mode_handler = None;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     match &evt.union {
         Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
             _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
@@ -2374,24 +2374,24 @@ async fn send_sas() -> ResultType<()> {
 }
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn wayland_use_uinput() -> bool {
     !crate::platform::is_x11() && crate::is_server()
 }
 
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn wayland_use_rdp_input() -> bool {
     !crate::platform::is_x11() && !crate::is_server()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub struct TemporaryMouseMoveHandle {
     thread_handle: Option<std::thread::JoinHandle<()>>,
     tx: Option<mpsc::Sender<(i32, i32)>>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 impl TemporaryMouseMoveHandle {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel::<(i32, i32)>();
@@ -2415,7 +2415,7 @@ impl TemporaryMouseMoveHandle {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 impl Drop for TemporaryMouseMoveHandle {
     fn drop(&mut self) {
         log::debug!("Dropping TemporaryMouseMoveHandle");

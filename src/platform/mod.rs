@@ -23,14 +23,14 @@ pub mod linux;
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod gtk_sudo;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use base::message_proto::CursorData;
 #[cfg(all(
     not(all(target_os = "windows", not(target_pointer_width = "64"))),
-    not(any(target_os = "android", target_os = "ios"))
+    not(any(target_os = "android", target_os = "ios", target_env = "ohos"))
 ))]
 use hbb_common::sysinfo::System;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::{sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
@@ -45,7 +45,7 @@ pub fn installing_service() -> bool {
 }
 
 pub fn is_xfce() -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         return std::env::var_os("XDG_CURRENT_DESKTOP") == Some(std::ffi::OsString::from("XFCE"));
     }
@@ -62,7 +62,7 @@ pub fn breakdown_callback() {
     crate::input_service::release_device_modifiers();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
     let cur_resolution = current_resolution(name)?;
     // For MacOS
@@ -137,7 +137,7 @@ impl Drop for InstallingService {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[inline]
 pub fn is_prelogin() -> bool {
     false
@@ -147,7 +147,7 @@ pub fn is_prelogin() -> bool {
 // It should only be called when performance is not critical.
 // If we wanted to get the command line ourselves, there would be a lot of new code.
 #[allow(dead_code)]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     args: &[S2],
@@ -180,7 +180,7 @@ fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
 
 // Note: This method is inefficient on Windows. It will get all the processes.
 // It should only be called when performance is not critical.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     arg: S2,
@@ -236,7 +236,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     #[test]
     fn test_resolution() {
         let name = r"\\.\DISPLAY1";

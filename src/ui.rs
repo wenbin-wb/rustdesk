@@ -107,7 +107,7 @@ pub fn start(args: &mut [String]) {
         frame.sciter_handler(UIHostHandler {});
         page = "index.html";
         // Start pulse audio local server.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         std::thread::spawn(crate::ipc::start_pa);
     } else if args[0] == "--install" {
         frame.event_handler(UI {});
@@ -543,7 +543,7 @@ impl UI {
         let p = "exe";
         #[cfg(target_os = "macos")]
         let p = "dmg";
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let p = "deb";
         p.to_owned()
     }
@@ -596,7 +596,7 @@ impl UI {
         let p = "explorer";
         #[cfg(target_os = "macos")]
         let p = "open";
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let p = if std::path::Path::new("/usr/bin/firefox").exists() {
             "firefox"
         } else {
@@ -849,7 +849,7 @@ fn get_sound_inputs() -> Vec<String> {
     out
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn get_sound_inputs() -> Vec<String> {
     crate::platform::linux::get_pa_sources()
         .drain(..)

@@ -77,7 +77,7 @@ impl Screenshot {
                 std::fs::write(p, data)?;
             }
             ScreenshotAction::CopyToClipboard => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 {
                     let clips = vec![Clipboard {
                         compress: false,

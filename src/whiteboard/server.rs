@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tao::event_loop::EventLoopProxy;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use winit::event_loop::EventLoopProxy;
 
 lazy_static! {
@@ -28,7 +28,7 @@ type RippleFloat = f64;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 type RippleFloat = f32;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub use super::linux::run;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]

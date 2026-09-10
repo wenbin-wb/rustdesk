@@ -111,11 +111,11 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES: usize =
     super::input_service::WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS * 4;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
     let end = bytes.len().min(WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
     let slice = &bytes[..end];
@@ -133,7 +133,7 @@ fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     if clipboard.format.enum_value() != Ok(ClipboardFormat::Text) {
         return None;
@@ -145,7 +145,7 @@ fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     decode_utf8_prefix(&clipboard.content)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn should_skip_wayland_clipboard_sync(msg: &Message) -> bool {
     if crate::platform::linux::is_x11() {
         return false;
@@ -230,7 +230,7 @@ impl Handler {
             }
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             let msg = crate::clipboard::peek_clipboard(&mut self.ctx, ClipboardSide::Host, false)?;
             if should_skip_wayland_clipboard_sync(&msg) {
@@ -344,7 +344,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 mod tests {
     use super::{decode_utf8_prefix, WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES};
 
