@@ -6,6 +6,6 @@
   "author": "Purslane Tech Pte. Ltd.",
   "license": "GPL-3.0",
   "dependencies": {
-    "@ohos/flutter_ohos": "file:./har/flutter.har"
+    "@ohos/flutter_ohos": "file:./libs/@ohos/flutter_ohos"
   }
 }

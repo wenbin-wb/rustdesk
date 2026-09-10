@@ -20,6 +20,13 @@ set WRAPPER_MODULE_PATH=%DIRNAME%\hvigorw.js
 set NODE_EXE=node.exe
 @rem set NODE_OPTS="--max-old-space-size=8192 --expose-gc"
 
+if not defined DEVECO_SDK_HOME if exist "D:\Program Files\Huawei\DevEco Studio\sdk" set DEVECO_SDK_HOME=D:\Program Files\Huawei\DevEco Studio\sdk
+if not defined JAVA_HOME if exist "D:\Program Files\Huawei\DevEco Studio\jbr" set JAVA_HOME=D:\Program Files\Huawei\DevEco Studio\jbr
+if defined JAVA_HOME set PATH=%JAVA_HOME%\bin;%PATH%
+if not defined NODE_HOME if exist "D:\Program Files\Huawei\DevEco Studio\tools\node" set NODE_HOME=D:\Program Files\Huawei\DevEco Studio\tools\node
+if not defined NODE_PATH set NODE_PATH=%APP_HOME%\node_modules;D:\Program Files\Huawei\DevEco Studio\tools\hvigor
+if exist "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\hvigor\bin\hvigor.js" set WRAPPER_MODULE_PATH=D:\Program Files\Huawei\DevEco Studio\tools\hvigor\hvigor\bin\hvigor.js
+
 goto start
 
 :start

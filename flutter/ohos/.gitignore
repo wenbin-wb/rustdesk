@@ -6,3 +6,4 @@ oh_modules/
 *.hsp
 *.har
 local.properties
+node_modules/
