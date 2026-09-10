@@ -40,28 +40,39 @@ export default class EntryAbility extends UIAbility {
 
   private applyImmersiveWindow(windowStage: window.WindowStage): void {
     const win = windowStage.getMainWindowSync();
+
+    // Full screen layout is what stops the system reserving a strip for the bars, which is
+    // what the window-coloured band at the top and bottom was.
     win.setWindowLayoutFullScreen(true).catch(() => {});
 
-    // Bar icons have to contrast with our own background, not with a system-drawn bar, so
-    // state which surface they sit on rather than leaving it to the default.
+    // Bar icons sit on our own background rather than on a system-drawn bar, so state which
+    // surface they are over rather than leaving it to the default.
     win.setWindowSystemBarProperties({
       statusBarContentColor: '#000000',
       navigationBarContentColor: '#000000'
     }).catch(() => {});
 
-    // A full-screen window means the page owns the areas the bars occupy, so it has to inset
-    // its own content. Publishing the measurements keeps that arithmetic out of the layout
-    // tree: the page reads these and pads. Values stay in px; the page converts.
+    // A full-screen window means the framework no longer insets content: measured on device,
+    // the tab bar sat flush against y=2848, the last row of pixels. So the insets have to be
+    // read and applied by the page. Publishing the raw px here keeps the window arithmetic in
+    // the ability and the layout in the page.
     this.publishAvoidArea(win, window.AvoidAreaType.TYPE_SYSTEM, 'statusBarInsetPx');
     this.publishAvoidArea(win, window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, 'navIndicatorInsetPx');
   }
 
+  /**
+   * Publish one avoid area's height, in px, for the page to inset against.
+   *
+   * TYPE_SYSTEM is the status bar (its top rect); the navigation indicator is the gesture bar
+   * at the bottom (its bottom rect). Anything not reported stays 0, so a device without one
+   * simply gets no inset.
+   */
   private publishAvoidArea(win: window.Window, type: window.AvoidAreaType, key: string): void {
     const area = win.getWindowAvoidArea(type);
-    const px = type === window.AvoidAreaType.TYPE_SYSTEM
+    const height = type === window.AvoidAreaType.TYPE_SYSTEM
       ? area.topRect.height
       : area.bottomRect.height;
-    AppStorage.setOrCreate(key, px);
+    AppStorage.setOrCreate(key, height);
   }
 
   onDestroy(): void {

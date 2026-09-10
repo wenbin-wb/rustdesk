@@ -43,6 +43,12 @@ struct Index {
 
   private tabsController: HdsTabsController = new HdsTabsController();
 
+  // Published by EntryAbility from the window's avoid areas, in px. The window is laid out
+  // full screen, so the framework does not inset content on its own and these have to be
+  // applied here. Measured on device: without them the tab bar sat on the last pixel row.
+  @StorageProp('statusBarInsetPx') statusBarInsetPx: number = 0;
+  @StorageProp('navIndicatorInsetPx') navIndicatorInsetPx: number = 0;
+
   private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
     builder: ServerSettingsDialog({
       onSaved: () => {
@@ -150,6 +156,17 @@ struct Index {
 
   build() {
     Stack() {
+      // Background layer. This is the only thing that bleeds under the status bar and the
+      // gesture indicator, which is what removes the window-coloured strip at the top and
+      // bottom. Everything else is a sibling that does NOT expand, so the system insets it
+      // into the safe area automatically -- expandSafeArea applies per component, and that
+      // is the whole mechanism. No avoid-area arithmetic is needed.
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor($r('app.color.bg_page'))
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+
       if (this.isInRemoteSession) {
         RemoteSessionPage({
           targetId: this.connectedTargetId,
@@ -165,7 +182,6 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.bg_page'))
   }
 
   @Builder
@@ -176,11 +192,13 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    // The window is laid out full screen (see EntryAbility), so the page background runs
-    // under the status bar and the gesture area -- that is what removes the window-coloured
-    // strip at the top and bottom. The content itself is padded back out, below, since the
-    // bars would otherwise sit on top of it.
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // Inset the content clear of the status bar and the gesture bar, which the full-screen
+    // window no longer does for us. The background layer underneath still bleeds, so the page
+    // reads as full screen while nothing sits under a system bar.
+    .padding({
+      top: px2vp(this.statusBarInsetPx),
+      bottom: px2vp(this.navIndicatorInsetPx)
+    })
   }
 
   @Builder
@@ -253,6 +271,11 @@ struct Index {
     .layoutWeight(1)
     .backgroundColor(Color.Transparent)
     .barFloatingStyle(usesSideNavigation(this.breakpoint) ? undefined : {
+      // A width range is required for the bar to read as a floating pill. Without it the bar
+      // keeps the full width and only the margins change, which does not look floating.
+      // The three bands are the component's own breakpoints: under 440vp, 440-600vp, over
+      // 840vp.
+      barWidth: { smallWidth: '72%', mediumWidth: '62%', largeWidth: '52%' },
       barSideMargin: 16,
       barBottomMargin: 12
     } as HdsTabsFloatingStyle)
