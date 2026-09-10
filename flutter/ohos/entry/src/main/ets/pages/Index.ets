@@ -1,4 +1,4 @@
-import { FlutterPage } from './FlutterPage';
+import { LiquidTabBar } from './LiquidTabBar';
 import { ConfigManager, ServerConfig, UserProfile, StoredPeer } from '../platform/ConfigStorage';
 import { ServerSettingsDialog } from './ServerSettingsDialog';
 import { LoginDialog } from './LoginDialog';
@@ -10,7 +10,6 @@ import { AuthService } from '../platform/AuthService';
 @Entry
 @Component
 struct Index {
-  @State isFlutterReady: boolean = false;
   @State activeTab: number = 0;
   @State remoteIdInput: string = '';
   @State myId: string = '';
@@ -212,10 +211,6 @@ struct Index {
         })
           .width('100%')
           .height('100%')
-      } else if (this.isFlutterReady) {
-        FlutterPage({ viewId: 'flutter_view' })
-          .width('100%')
-          .height('100%')
       } else {
         Column() {
           // Top Header Bar
@@ -285,51 +280,24 @@ struct Index {
               }
             }
             .width('100%')
-            .padding(16)
+            .padding({ left: 16, right: 16, top: 16, bottom: 84 })
           }
           .layoutWeight(1)
           .width('100%')
-
-          // Bottom Navigation Bar
-          Row() {
-            this.buildNavItem('连接', 0)
-            this.buildNavItem('设备簿', 1)
-            this.buildNavItem('设置', 2)
-          }
-          .width('100%')
-          .height(56)
-          .backgroundColor('#FFFFFF')
-          .border({ width: { top: 1 }, color: '#E5E6EB' })
         }
         .width('100%')
         .height('100%')
         .backgroundColor('#F5F7FA')
+
+        // HarmonyOS 7 Floating Liquid Tab Bar
+        LiquidTabBar({
+          activeIndex: $activeTab
+        })
+        .margin({ bottom: 20 })
       }
     }
     .width('100%')
     .height('100%')
-  }
-
-  @Builder
-  buildNavItem(title: string, index: number) {
-    Column({ space: 3 }) {
-      Text(title)
-        .fontSize(14)
-        .fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor(this.activeTab === index ? '#007DFF' : '#8F959E')
-      if (this.activeTab === index) {
-        Divider()
-          .strokeWidth(2)
-          .color('#007DFF')
-          .width(20)
-      }
-    }
-    .layoutWeight(1)
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .onClick(() => {
-      this.activeTab = index;
-    })
   }
 
   @Builder
@@ -730,17 +698,6 @@ struct Index {
       .padding(16)
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
-
-      Button('进入全量 Flutter 渲染引擎')
-        .width('100%')
-        .height(44)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .backgroundColor('#007DFF')
-        .borderRadius(8)
-        .onClick(() => {
-          this.isFlutterReady = true;
-        })
     }
     .width('100%')
   }

@@ -1,11 +1,10 @@
 {
   "name": "entry",
   "version": "1.5.0",
-  "description": "RustDesk Entry Module for HarmonyOS NEXT",
+  "description": "RustDesk Pure Native ArkTS Entry Module for HarmonyOS NEXT",
   "main": "src/main/ets/entryability/EntryAbility.ets",
   "author": "Purslane Tech Pte. Ltd.",
   "license": "GPL-3.0",
-  "dependencies": {
-    "@ohos/flutter_ohos": "file:./libs/@ohos/flutter_ohos"
-  }
+  "dependencies": {}
 }
+

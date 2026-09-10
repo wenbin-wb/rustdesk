@@ -1,5 +1,6 @@
-import { FlutterPage } from './FlutterPage';
 import { DesktopCanvas } from './DesktopCanvas';
+import { RemoteStreamReceiver } from '../platform/RemoteStreamReceiver';
+import { ConfigManager } from '../platform/ConfigStorage';
 
 @Component
 export struct RemoteSessionPage {
@@ -9,13 +10,45 @@ export struct RemoteSessionPage {
   @State isSoftKeyboardVisible: boolean = false;
   @State qualityMode: string = '流畅 (Balanced)';
   @State latencyMs: number = 24;
+  @State isHardwareDecoded: boolean = false;
+  private xComponentController: XComponentController = new XComponentController();
+
+  aboutToAppear(): void {
+    const streamReceiver = RemoteStreamReceiver.getInstance();
+    const configManager = ConfigManager.getInstance();
+    configManager.getServerConfig().then(cfg => {
+      const host = cfg.idServer.trim() || 'custom.rustdesk.com';
+      streamReceiver.startStream(this.targetId, host).then(ok => {
+        this.isHardwareDecoded = ok;
+      });
+    });
+  }
+
+  aboutToDisappear(): void {
+    const streamReceiver = RemoteStreamReceiver.getInstance();
+    streamReceiver.stopStream();
+  }
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      // Interactive Remote Stream Canvas with live touch input
+      // Native XComponent Surface pipeline directly driven by AVCodec
+      XComponent({
+        id: 'remote_surface',
+        type: XComponentType.SURFACE,
+        controller: this.xComponentController
+      })
+        .onLoad(() => {
+          const surfaceId = this.xComponentController.getXComponentSurfaceId();
+          RemoteStreamReceiver.getInstance().setSurfaceId(surfaceId);
+        })
+        .width('100%')
+        .height('100%')
+
+      // Touch Control & Information Layer
       DesktopCanvas({ targetId: this.targetId })
         .width('100%')
         .height('100%')
+        .opacity(this.isHardwareDecoded ? 0.05 : 1.0)
 
       // Top Floating Toolbar (Matches iOS/Android Remote Control Bar)
       if (this.showToolbar) {

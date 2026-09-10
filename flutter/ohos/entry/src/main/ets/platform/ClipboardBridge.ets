@@ -1,9 +1,8 @@
 import { pasteboard } from '@kit.BasicServicesKit';
-import { MethodChannel } from '@ohos/flutter_ohos';
 
 export class ClipboardBridge {
   private static instance: ClipboardBridge | null = null;
-  private channel: MethodChannel | null = null;
+  private onClipboardChangedCallback?: (text: string) => void;
   private sysPasteboard: pasteboard.SystemPasteboard = pasteboard.getSystemPasteboard();
 
   private constructor() {}
@@ -15,8 +14,8 @@ export class ClipboardBridge {
     return ClipboardBridge.instance;
   }
 
-  public init(channel: MethodChannel): void {
-    this.channel = channel;
+  public init(callback?: (text: string) => void): void {
+    this.onClipboardChangedCallback = callback;
     try {
       this.sysPasteboard.on('update', () => {
         this.notifyClipboardUpdate();
@@ -49,10 +48,10 @@ export class ClipboardBridge {
   }
 
   private async notifyClipboardUpdate(): Promise<void> {
-    if (!this.channel) {
+    if (!this.onClipboardChangedCallback) {
       return;
     }
     const text = await this.getText();
-    this.channel.invokeMethod('onClipboardChanged', text);
+    this.onClipboardChangedCallback(text);
   }
 }
