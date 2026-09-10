@@ -1,0 +1,8 @@
+.hvigor/
+.preview/
+build/
+oh_modules/
+*.hap
+*.hsp
+*.har
+local.properties
