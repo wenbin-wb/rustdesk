@@ -155,6 +155,25 @@
 | 3 | DevEco 路径含空格 | `--sysroot=D:\Program Files\...` 被 cc crate 按空格切分 → clang 报 no such file | 建无空格 junction `C:\ohos-ndk` → DevEco `native` 目录；更新 `.cargo/config.toml` 与构建脚本 |
 | 4 | `machine-uid` build.rs 误判 | `#[cfg(target_os="windows")]` 在 build.rs 里判定的是**主机**，交叉编译到 ohos 仍编译 `win.cpp` | hbb_common：把 `machine-uid`/`mac_address`/`default_net` 的 cfg 门从 `not(any(android, ios))` 扩为含 `target_env = "ohos"` |
 | 5 | `libs/base` 桌面 Linux 模块 | `platform::linux` 在 ohos 下被编译，引用 `sctk`(Wayland)/`users` 失败 | `libs/base/src/platform/mod.rs`：`#[cfg(all(target_os="linux", not(target_env="ohos")))]` |
+| 6 | GStreamer/GTK 被拉入 | 根 `Cargo.toml` 无条件启用 `scrap/wayland` → gstreamer → `glib-sys` 编译失败 | 根 `Cargo.toml` 拆两个 target 段：非 ohos 启 `wayland`，ohos 用无特性 `scrap` |
+| 7 | openssl 被迫走 vendored | 根 `Cargo.toml` 对 `any(linux, android)` 启用 `openssl/vendored`，覆盖了 prebuilt，转去编译 openssl 源码（需 perl，本机无） | 该 dep 的 cfg 加 `not(target_env = "ohos")`，ohos 改用 prebuilt + `AARCH64_UNKNOWN_LINUX_OHOS_OPENSSL_DIR` |
+
+### ⛔ 当前唯一阻塞：`nix` 0.26.4 无法为 ohos 编译
+
+根 crate 检查的报错集中在 `nix`（51 个错误）：`mq_*` / `aio_*` / `__fsword_t` / `O_FSYNC` / `XFS_SUPER_MAGIC` / `ST_RELATIME` / `FDPIC_FUNCPTRS` / `UNAME26` 在 ohos 的 `libc` 中不存在，另有 2 处类型不匹配与 1 处 `SigevNotify` 非穷尽匹配。
+
+**根因**：`nix` 以 `target_os = "linux"` 判定并按 **glibc** 假设编译 `mqueue`/`aio`/`personality`/`fs`(statfs)/`signal`；ohos 虽是 `target_os = "linux"`，但 libc 是 musl 风格、缺这些 glibc 专有符号。
+
+**依赖链**：`nix@0.26.4` ← `webrtc-util@0.11.0`（rustdesk-org/webrtc fork）← `interceptor` ← `webrtc@0.13.0` ← `hbb_common`。
+
+**关键事实**：`webrtc` 是客户端**核心传输路径**（`client.rs` transport racing、`rendezvous_mediator.rs` answerer），**不能靠关特性绕过**；而 `webrtc-util` 对 `nix` 的使用**仅一处**：`util/src/lib.rs` 的 `nix::ifaddrs::getifaddrs()` 与 `nix::sys::socket::{AddressFamily, SockaddrLike, SockaddrStorage}`。
+
+**候选方案**：
+| 方案 | 做法 | 体积 | 评价 |
+|---|---|---|---|
+| N1 | vendor `nix` 0.26.4，给失败项加 `not(target_env="ohos")` cfg 门，`[patch.crates-io]` 指本地 | 108 文件 / 1426 KB | 改动面小但仓库膨胀大；nix 0.26.4 已冻结，同步负担低 |
+| **N2（推荐）** | vendor fork 的 `webrtc-util`（314 KB / 53 文件），把唯一一处 `nix` 用法换成直接 `libc`（对齐既有 Android `platform/android_ifaddrs.c` 做法），现有 `[patch.crates-io] webrtc-util` 改为本地 path | 53 文件 / 314 KB | 体积极小、语义最正确、与既有 Android 先例一致；代价是需跟随 fork rev 同步 |
+| N3 | 升 `webrtc` 0.13 → 0.14+（`webrtc-util` 0.12 可能不再依赖 nix） | — | hbb_common 注释说明 0.13 是为兼容 Rust 1.75 而钉住；本机 Rust 1.98 虽满足，但属**跨平台大范围依赖升级**，超出移植 PR 范围 |
 
 > ⚠️ **临时措施（需后续处理）**：根 `Cargo.toml` 中 `portable-pty`（`rustdesk-org/wezterm` 巨型 fork）已临时注释停用。
 > 原因：cargo 解析 lockfile 时会拉取全部 git 依赖（即使该依赖对当前 target 已被 cfg 排除），而该 wezterm fork 体积过大且在本机网络上**反复停滞**（已卡在 index-pack 阶段十余分钟）。它仅被**桌面端终端功能**使用，对 ohos 目标本就被 `not(any(android, ios, ohos))` 排除，因此不影响 ohos 构建；但**桌面端构建的终端功能会缺失**，需在正式提 PR 前恢复（或在 CI/良好网络下重新拉取该依赖）。

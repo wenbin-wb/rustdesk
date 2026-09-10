@@ -51,7 +51,6 @@ screencapturekit = ["cpal/screencapturekit"]
 
 [dependencies]
 async-trait = "0.1"
-scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
 base = { path = "libs/base" }
 serde_derive = "1.0"
@@ -86,6 +85,14 @@ totp-rs = { version = "5.4", default-features = false, features = ["gen_secret",
 stunclient = "0.4"
 kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys", branch = "rustdesk-patches" }
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
+
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
+# The desktop Wayland/X11 capture backend pulls GStreamer/GTK, which HarmonyOS has no
+# equivalent of; ohos uses the native HarmonyOS capture/codec APIs instead.
+scrap = { path = "libs/scrap", features = ["wayland"] }
+
+[target.'cfg(target_env = "ohos")'.dependencies]
+scrap = { path = "libs/scrap" }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
@@ -203,7 +210,7 @@ termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(all(any(target_os = "linux", target_os = "android"), not(target_env = "ohos")))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
