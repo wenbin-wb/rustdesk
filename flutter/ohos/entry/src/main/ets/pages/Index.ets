@@ -162,7 +162,16 @@ struct Index {
     // Read the effective value back from the core rather than trusting the local copy, so
     // the label shows the server the app will actually use. An empty result means the core
     // is on its built-in default, i.e. the public servers.
-    const fromCore = getOption('custom-rendezvous-server').trim();
+    //
+    // Guarded locally rather than left to the caller: this is on the startup path, and if the
+    // core is unreachable the label should still fall back to the stored value rather than the
+    // function abandoning before it sets anything.
+    let fromCore = '';
+    try {
+      fromCore = getOption('custom-rendezvous-server').trim();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'core server option unavailable: %{public}s', JSON.stringify(e));
+    }
     const effective = fromCore.length > 0 ? fromCore : cfg.idServer.trim();
     this.serverLabel = effective.length > 0
       ? effective
