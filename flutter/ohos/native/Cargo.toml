@@ -12,6 +12,11 @@ name = "rustdesk_ohos"
 crate-type = ["cdylib"]
 
 [dependencies]
+# The core, linked in as an rlib. `flutter` is what enables the crate's flutter_ffi
+# module (it supplies flutter_rust_bridge's types); HarmonyOS takes that module's
+# exports but not its codegen, see src/lib.rs in this crate.
+rustdesk = { path = "../../../", features = ["flutter"] }
+
 # napi-ohos / napi-derive-ohos are the OpenHarmony fork of napi-rs (see
 # flutter/ohos/PLAN.md section 7.3). HarmonyOS has no Dart isolate, so the core is
 # reached through these N-API exports rather than flutter_rust_bridge's codegen.
@@ -20,7 +25,3 @@ napi-derive-ohos = "1"
 
 [build-dependencies]
 napi-build-ohos = "1"
-
-# Built standalone: the parent workspace would otherwise try to resolve this crate's
-# ohos-only dependencies for the host.
-[workspace]

@@ -219,12 +219,12 @@ jni = "0.21"
 android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
-# These vendored/generated crates declare their own [workspace] because they are built
-# standalone: libs/nix and libs/rdev are vendored copies, and flutter/ohos/native is the
-# Node-API bridge, an ohos-only cdylib. Without excluding them cargo reports multiple
-# workspace roots.
-exclude = ["vdi/host", "libs/nix", "libs/rdev", "flutter/ohos/native"]
+members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer", "flutter/ohos/native"]
+# These vendored crates declare their own [workspace] because they are built standalone
+# copies; without excluding them cargo reports multiple workspace roots. The ohos bridge
+# is a workspace member instead, so it shares this file's [patch] entries and Cargo.lock
+# rather than resolving the tree independently (which picked incompatible revisions).
+exclude = ["vdi/host", "libs/nix", "libs/rdev"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
