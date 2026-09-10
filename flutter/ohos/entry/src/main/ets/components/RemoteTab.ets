@@ -9,7 +9,7 @@
 import { SectionCard } from './SectionCard';
 import { HdsListItemCard } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { getMyId, getCoreVersion, getTemporaryPassword } from '../platform/RustDeskBridge';
+import { getMyId, getTemporaryPassword } from '../platform/RustDeskBridge';
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
 
 const DOMAIN = 0x0000;

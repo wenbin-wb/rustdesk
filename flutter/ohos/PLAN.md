@@ -138,14 +138,21 @@
   - 解析失败**不 panic**（跨 NAPI 边界 panic 会终止应用），而是走"会话不存在"的负结果分支
   - 已接入：`sessionIsMultiUiSession`、`sessionGetIsRecording`、`sessionGetEnableTrustedDevices`、`willSessionCloseCloseSession`、`sessionIsKeyboardModeSupported(id,mode)`、`sessionGetToggleOptionSync(id,arg)`、`sessionGetReverseMouseWheelSync(id)`
   - 产物 `librustdesk_ohos.so` **2.07 MB**，实测 **32/32 导出符号全部在位**
-- [ ] 🔴 **核心生命周期未接通（审核发现的 P2 阻塞项）**
-  - ArkTS 侧只调了读取接口，**未调用 `mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir`**，故 `Config::get_id()` 在未初始化状态下会落到 `gen_id()` 的随机分支 → 设备 ID 可能为空或每次冷启动都变（与旧 mock 症状无法区分）
-  - 需：桥接导出上述 4 个接口 → `EntryAbility` 启动时用应用沙盒目录调用 → 再让 `getMyId()` 有真实意义
+- [x] 🔴→✅ **核心生命周期已接通**（真机验证待做）
+  - 桥接新增导出 `mainSetHomeDir` / `mainDeviceId` / `mainDeviceName` / `mainInit` / `mainGetAsyncStatus` / `mainGetError`，
+    `EntryAbility.onCreate` 最先调用（用沙盒 `context.filesDir`），顺序对齐 Flutter 的 `native_model.dart`
+  - **但仅接通生命周期还不够** —— 真正的根因在 `hbb_common`：`Config::path()` 与 `Config::get_home()` 的平台分支
+    只列了 android/ios，而 **ohos 是 `target_os="linux"` + `target_env="ohos"`**，于是两者都走了桌面回退：
+    - `path()` → `ProjectDirs`，**无 ohos 条目 → 返回空路径** ⇒ 核心写的配置全落在进程工作目录
+    - `get_home()` → `dirs_next::home_dir()`，沙盒内无有效值
+  - `Config::get_id()` 在存储为空时会**生成随机 ID 并持久化**；路径不可解析 ⇒ 写入无效 ⇒
+    **每次启动都重新生成** ⇒ 这正是"设备 ID 每次冷启动都变"的真正根因（此前被误当作独立问题）
+  - 已在 `libs/hbb_common` 修复（第 4 个补丁），并顺带把 `gen_id()` 归入移动端分支（原本在 ohos 上走桌面分支去读 hostname 选项）
+  - 另补：**ohos 上核心此前完全没有日志**（android/ios 各有一块，ohos 两者都不进），已接入文件日志
 - [x] **NAPI 模块的 `.d.ts` 类型声明**（应做，但**不是**闪退根因 —— 见下一条）
   - hvigor 警告 *"module for 'librustdesk_ohos.so' is not verified ... make sure the corresponding
     `.d.ts` file is provided"*，且说明后续 SDK 会强制校验
-  - 已新增 `entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}`（33 个成员），
-    并在 `entry/oh-package.json5` 加 `"librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"`
+  - 已新增 `entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}`，并在 `entry/oh-package.json5` 声明依赖
   - ⚠️ **坑**：类型声明**不能放 `entry/src/main/cpp/` 下** —— 该目录一旦存在，hvigor 会认为有 CMake 原生工程，
     报 `externalNativeOptions/path does not exist`。放 `src/main/types/` 即可
   - ❌ **更正**：此处曾写"真机闪退的根因就是缺这个文件"，**该结论是错的**。加完 `.d.ts` 后应用**仍然闪退**，
@@ -211,8 +218,12 @@
 > **说明**：`RemoteSessionPage.ets` / `ServerSettingsDialog.ets` / `ConfigStorage.ets` 携带**本次会话之前就存在的未提交改动**（上个 agent 遗留）。因 P3 构建依赖它们，随本次提交一并入库。
 
 ### P4 · 控制端核心链路
-- [ ] 真实连接/鉴权（rendezvous → relay/P2P → 会话）
-- [ ] 视频渲染（XComponent + 硬解）
+- [x] **移除伪实现**：`RemoteSessionPage` 原来默认把 `https://rustdesk.com/web/` 装进 WebView，
+  另有 `DesktopCanvas` 用 `ctx.arc` **手绘假桌面**并只记录点击 —— 两者都不是会话（网页客户端是另一个产品，
+  完全不知道本应用的设备 ID 与目标）。**已全部删除**，改为如实显示核心真实状态 + 明确标注未接通部分
+- [ ] 真实连接/鉴权（rendezvous → relay/P2P → 会话）：需 `sessionAddSync` + `sessionStart`（收 `StreamSink<EventToUI>`）
+- [ ] 事件通道：核心 → ArkTS（`StreamSink` 在 ohos 上需换成 NAPI ThreadsafeFunction；`push_ui_event` 的 ohos 分支已预留）
+- [ ] 视频渲染（XComponent + 硬解）：消费核心的 `EventToUI::Rgba`，`getNextTextureKey` 已导出
 - [ ] 输入（触摸→鼠标/键盘、缩放、虚拟键鼠）
 - [ ] 剪贴板双向同步
 - [ ] 文件传输

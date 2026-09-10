@@ -70,129 +70,58 @@ $hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains
 |---|---|---|---|
 | **V1** | 设置 → 系统信息 | **核心版本** 显示 `1.5.0`（非 `—`） | ✅ **可靠的加载测试**：`mainGetVersion()` 返回编译期常量 `VERSION`，与核心是否初始化无关。显示 `—` 就说明 `.so` 没装载 |
 | **V2** | 设置 → 系统信息 | **桥接版本** 显示 `1.5.0` | 证明桥接 crate 自身可用 |
-| **V3** | 远程页 → 本机设备 ID | ⚠️ **见下方"重要说明"，此项目前不能作为判定依据** | 核心**未初始化**，ID 可能为空或每次冷启动都变 |
-| **V4** | 首页任一操作 | 不闪退 | 证明没有跨 NAPI 边界 panic |
-| **V5** | 折叠屏（若有）/ 平板 / 横屏 | 旋转或折叠（展开↔折叠）时，导航**从底栏切到侧栏**、内容重排且**不重建页面** | 断点自适应（`sm<600 / md 840 / lg 1440`） |
-| **V6** | 系统切**深色模式** | 全界面跟随（背景/文字/卡片） | `dark` 限定词资源生效 |
+| **V3** | 远程页 → 本机设备 ID | **9 位数字，且关闭重开后完全不变** | ⭐ **本轮最重要的验证点**。核心生命周期已接通，且修掉了 `Config::path()` 在 ohos 上返回空路径的缺陷，ID 现在应能持久化。**若仍每次变化，说明写入仍失败**，请看 §4.2 |
+| **V3b** | 远程页 → 一次性密码 | 显示**真实临时密码**（非 `------`） | 已改为从核心读取（`mainGetTemporaryPassword`），此前读的是一个从未被写入的本地键 |
+| **V4** | 首页任一操作 | 不闪退 | 已修复"点连接闪退"（`this.controller` 为 undefined）。连接流程应能走完：远程 → 连接 → 弹密码框 → 输入 → 连接 |
+| **V5** | 折叠屏 / 平板 / 横屏 | 旋转或折叠时导航从**底栏切到侧栏**、内容重排 | 断点自适应（`sm<600 / md 840 / lg 1440`） |
+| **V6** | 系统切**深色模式** | 全界面跟随，**弹窗内文字与占位符清晰可读** | 三个弹窗此前全硬编码（49 处 hex），已全部改为资源令牌 |
 | **V7** | 系统语言切换 / 英文机 | 界面文案跟随（中文 base / `en_US`） | i18n 资源生效 |
+| **V8** | 手机形态下看底栏 | **悬浮药丸**：左右留白、离底抬起、内容可透出、毛玻璃 | 关键是 `barOverlap(true)`。实测底部内容区 `225→1051`（满宽为 0→1276）、底边 `2666`（离底 182px） |
+| **V9** | 顶部/底部边缘 | **无窗口色条**，内容不被状态栏/手势条遮挡 | 已 `setWindowLayoutFullScreen(true)` 并应用真实安全区内缩 |
+| **V10** | 设置 → 服务器设置：填自建地址 → 保存 → 关闭 → **重开** | 字段**显示刚才填的值** | 此前弹窗只在创建时读一次配置，重开为空；现由页面持有状态并在打开前刷新 |
+| **V11** | 填密码勾选"记住"→ 断开 → 再连同一设备 | **不再弹密码框** | 密码存取此前因存储未初始化而全程失效（三个函数都早退），已修 |
+| **V12** | 连到新设备后看"设备"/"最近" | **新设备出现在列表** | 列表此前只在首次构建时加载且不会刷新，现由页面通知重载 |
 
-> ### ⚠️ 重要说明：V3 目前不可作为判定依据（审核发现）
->
-> ArkTS 侧**只调用了 `mainGetMyId()`，没有调用任何核心生命周期**
-> （`mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir` 均未导出、未调用）。
-> 而 `mainGetMyId()` → `Config::get_id()` 依赖配置已加载：
->
-> ```rust
-> // hbb_common/src/config.rs
-> pub fn get_id() -> String {
->     let mut id = CONFIG.read().unwrap().id.clone();
->     if id.is_empty() {
->         if let Some(tmp) = Config::gen_id() { id = tmp; Config::set_id(&id); }
->     }
->     id
-> }
-> ```
->
-> 未初始化时 `CONFIG` 为默认空值 → 走 `gen_id()`；而本仓库为 ohos 打的补丁让 `gen_id()`
-> 落到**随机数**分支。结果可能是：**ID 为空**，或**每次冷启动都不同**
-> —— 后者恰好与"旧代码本地随机数"的症状**无法区分**，会得出错误结论。
->
-> **所以请不要用 V3 判断"ID 是否来自核心"。** 真正的判定请看日志：
-> `hdc hilog | Select-String "Failed to get machine uid"` 之类，或在 `mainInit` 接通后重测。
-> 修复方式是导出并调用核心初始化序列（P2 未完项），见 `PLAN.md`。
+### 4.2 若 V3 失败（ID 仍变）该看什么
 
-**失败时最有用的一条**：若 V1 显示 `—`，说明 `.so` 没装载 —— 先查
-HAP 里有没有它：
-
-```powershell
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$z=[System.IO.Compression.ZipFile]::OpenRead("<hap路径>")
-$z.Entries | Where-Object { $_.FullName -match "\.so$" } | Select-Object FullName, Length
-```
-
-必须能看到 `libs/arm64-v8a/librustdesk_ohos.so`（约 2100 KB）。
-**历史坑**：预编译 `.so` 必须放**模块根 `entry/libs/<abi>/`**；放
-`entry/src/main/libs/<abi>/` 会**编译通过但被静默排除出 HAP**。
-
----
-
-## 4.1 已实测：闪退根因与修复（2026-09-10 真机 LMR-AL10 / API 26）
-
-**症状**：装上后一启动就闪退，无 native crash，只有 `jscrash` 记录。
-
-**⚠️ 真正的根因在 hilog，不在崩溃堆栈里 —— 两者必须一起看。**
-
-崩溃堆栈只给出**表象**：
-
-```
-Reason: TypeError
-Error message: Cannot read property mainGetMyId of undefined
-    at getMyId (entry/src/main/ets/platform/RustDeskBridge.ets:78:17)
-```
-
-hilog 才给出**底层原因**：
-
-```
-MUSL-LDSO: relocating failed: symbol not found.
-  dso=/data/storage/el1/bundle/libs/arm64/librustdesk_ohos.so s=sodium_base642bin
-MMG: [NMM:1439] load module default/rustdesk_ohos failed.
-ArkCompiler: export objects of native so is undefined
-```
-
-**取日志的正确姿势**：
+ID 的持久化链路是：`mainInit` 设 `APP_DIR` → 首次访问配置时 `Config::load()` →
+`path()` 解析出 `<filesDir>/RustDesk.toml` → 不存在则 `gen_id()` 生成随机 ID 并**写回该文件**。
+若仍每次变化，说明**写入失败**。检查顺序：
 
 ```powershell
 $hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"
-# ① ArkTS 层崩溃堆栈
-& $hdc shell "hidumper -s 1201 -a '-p Faultlogger'"
-& $hdc shell "hidumper -s 1201 -a '-p Faultlogger -f <上面列出的文件名>'"
-# ② 动态库加载失败原因（关键！崩溃堆栈里看不到）
-& $hdc shell hilog -x | Select-String "relocating failed|load module|export objects of native"
+# ① 核心日志是否在写（此前 ohos 完全没有日志初始化）
+& $hdc shell hilog -x | Select-String "RustDeskCore|Failed to (load|store)|confy"
+# ② 配置文件是否真的落盘
+& $hdc shell "run-as com.carriez.flutter_hbb ls -la files/ 2>&1"
+& $hdc shell "run-as com.carriez.flutter_hbb cat files/RustDesk.toml 2>&1"
 ```
 
-**根因**：`hbb_common → sodiumoxide → libsodium-sys`。`libsodium-sys 0.2.7` 没有该目标的
-预编译归档，**静默回退到打包内的 Windows 构建**（构建输出写着
-`cargo:rustc-link-search=native=.../libsodium-sys-0.2.7/mingw/win64/`）。那些是 **x86 目标文件**，
-lld 无法用于 aarch64，于是 `sodium_base642bin` 等符号悬空 → `dlopen` 失败 → 模块为 `undefined`
-→ ArkTS 抛 TypeError。
+> **注意**：`Config::store_` 写入失败**只记日志、不报错**（上游行为），`get_id()` 仍会返回内存里的 ID
+> —— 所以"界面上有 ID"**不能**证明已持久化，必须重开应用再比对。
 
-**修复**：`build_libsodium_ohos.ps1` 交叉编译 libsodium；`.cargo/config.toml` 用
-**目标专属 rustflags** 以完整路径链入该归档。
-
-> ⚠️ **不要用 `SODIUM_LIB_DIR`**（我第一次就这么做，结果把 host 也弄坏了）。它是**全局**变量，
-> 会让 **host** 也去链 aarch64 归档；而 host 的 build script **也需要 libsodium**
-> （`build.rs:89` 调 `hbb_common::gen_version()`，hbb_common 依赖 sodiumoxide），
-> 于是 host 链接报 `undefined reference to sodium_base642bin`。
-
-**排除掉的假设**（不要再走一遍）：设备缺 `libace_napi.z.so`（SELinux 让 `ls` 对存在与否都报
-"No such file"，该检查本身不可靠）；libc++ ABI 不匹配；RUNPATH 含构建机路径；
-**以及"缺 `.d.ts`"** —— `.d.ts` 确实该补（hvigor 警告、后续 SDK 会强制校验），
-但补完**仍然闪退**，报错完全相同，所以它**不是**根因。
-
-**隔离实验手法**（定位"是原生模块还是 UI"极有效）：临时把 `RustDeskBridge.ets`
-换成不导入 `.so` 的同名桩函数，重新打包运行 —— 桩版能跑而真实版崩，即可确定问题在 `.so` 导入。
-
-> **两条通用教训**：
-> ① ArkTS 层异常（`jscrash`）在 `hilog` 里**看不到堆栈**，要用
-> `hidumper -s 1201 -a '-p Faultlogger'`；反过来，**动态库加载失败在崩溃堆栈里看不到，要看 hilog**。
-> ② `aa start` 会因**设备锁屏**失败（`Error Code:10106102`），与代码无关，测试前先解锁。
-
----
+> ### ⚠️ 已修复的历史说明（保留以免误解）
+>
+> 此前的判定是"核心未初始化"，那只是**一半**原因。真正的根因是 `libs/hbb_common` 里
+> `Config::path()` / `get_home()` 的平台分支**只列了 android/ios**，而 ohos 是
+> `target_os="linux"` + `target_env="ohos"`，于是走了桌面回退：`path()` 经 `ProjectDirs`
+> **返回空路径** ⇒ 配置写不进去 ⇒ 每次启动重新生成 ID。现已归入移动端分支（`APP_DIR` / `APP_HOME_DIR`）。
 
 ## 5. ⚠️ 尚未实现 —— 不要当 BUG 报
 
-本次交付的是**核心可编译 + 桥接可用 + UI 按鸿蒙规范重写**，以下**有意未做**（计划见 `PLAN.md`）：
+本次交付的是**核心可编译且已启动 + 桥接可用 + UI 按鸿蒙规范重写（HDS）**，以下**有意未做**（计划见 `PLAN.md`）：
 
 | 项 | 现状 |
 |---|---|
-| **真正的远程连接** | 未接通。`连接` 目前只走地址簿 + 密码对话框，**没有发起 rendezvous/relay 会话** |
-| 视频画面 / XComponent 渲染 | 未实现 |
+| **真正的远程连接** | ❌ **未接通**。点"连接"只走"记入地址簿 + 密码对话框"，**不会发起 rendezvous/relay 会话**，因此**看不到对方画面是预期行为**。此前的网页版/假桌面已删除，现在的会话页只显示核心真实状态并明确标注未接通 |
+| 视频画面 / XComponent 渲染 | 未实现（需消费核心的 `EventToUI::Rgba`） |
+| 核心→界面的事件通道 | 未实现（`StreamSink` 需改为 NAPI ThreadsafeFunction） |
 | 触摸→鼠标/键盘输入注入 | 未实现 |
 | 剪贴板同步 | 未实现（Rust 侧是占位门控） |
 | 文件传输 | 未实现（按钮存在，无通道） |
 | 音频 | 未实现（Rust 侧门控掉） |
-| 被控端 / 屏幕共享 | 未实现，且鸿蒙侧受限（对标 iOS 同为后置） |
-| 登录 | 走 HTTP 登录接口，但未接入业务状态 |
+| 被控端 / 屏幕共享 | 未实现；`AVScreenCaptureRecorder` **API 确实存在**，但需授权流程与 syscap 检查，对标 iOS 同为后置 |
+| 登录 | 走 HTTP 登录接口，未接入业务状态 |
 | 折叠屏**铰链避让**（悬停态分区） | 未实现（已做的是断点重排） |
 
 另外两项环境层面的已知事项：

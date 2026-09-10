@@ -185,22 +185,10 @@ export class ConfigManager {
     await this.pref.flush();
   }
 
-  public async getOneTimePassword(): Promise<string> {
-    await this.ensureInit();
-    if (!this.pref) {
-      return '';
-    }
-    return (await this.pref.get('onetime_password', '')) as string;
-  }
-
-  public async setOneTimePassword(pwd: string): Promise<void> {
-    await this.ensureInit();
-    if (!this.pref) {
-      return;
-    }
-    await this.pref.put('onetime_password', pwd);
-    await this.pref.flush();
-  }
+  // The one-time password is not stored here. It belongs to the core, which generates and
+  // rotates it, and is read through mainGetTemporaryPassword. Accessors for a local
+  // 'onetime_password' key used to live at this point; nothing ever wrote that key, so the row
+  // could only ever show a placeholder. They are gone rather than left as a trap.
 
   public async getUserProfile(): Promise<UserProfile> {
     await this.ensureInit();
