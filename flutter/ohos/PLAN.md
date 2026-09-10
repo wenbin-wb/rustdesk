@@ -128,8 +128,12 @@
     - 返回 `SyncReturn<T>` → 需**拆包**（它是 flutter_rust_bridge 的"同步返回"标记，NAPI 无对应物）
     - 收 `StreamSink` → 是事件通道，ohos 改用自带投递路径（见 `push_ui_event` 预留分支）
     - 收 `SessionID`(UUID 串) → 需定 ArkTS 侧会话标识方式
-- [ ] 第二批导出：`SyncReturn<T>` 族（`main_get_option_sync`、`main_get_options_sync`、`main_get_app_name_sync`、`main_uri_prefix_sync`、`main_get_peer_sync`、`session_*` 等）
-- [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支）
+- [x] **第二批导出：`SyncReturn<T>` 族** ✅
+  - 关键认知：`SyncReturn<T>` 是 `pub struct SyncReturn<T>(pub T)` —— flutter_rust_bridge 的"同步返回而非 Future"**标记**，本身不承载额外数据；NAPI 里"返回朴素值"本来就是同步的，**故用 `.0` 拆包即可**
+  - 已接入：`mainGetOptionsSync`、`mainGetAppNameSync`、`mainUriPrefixSync`、`mainGetLoginDeviceInfo`、`getLocalKbLayoutType`、`mainGetOptionSync(key)`、`mainGetPeerSync(id)`、`getNextTextureKey`、`peerGetSessionsCount(id, connType)`
+  - 产物 `librustdesk_ohos.so` **2.05 MB**，实测 **25/25 导出符号全部在位**
+- [ ] 第三批：`SessionID` 族（`session_*`）—— 需先定 ArkTS 侧会话标识（建议透传 UUID 串，与 Flutter 侧一致）
+- [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
 - [ ] 打包为 HAR 并接入 HAP：`librustdesk_ohos.so` → `entry/src/main/libs/arm64-v8a/`
 

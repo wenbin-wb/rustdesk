@@ -109,3 +109,66 @@ passthrough_string! {
     main_get_new_stored_peers => "mainGetNewStoredPeers",
     main_get_options         => "mainGetOptions",
 }
+
+// --- SyncReturn family --------------------------------------------------------
+//
+// These core exports return `SyncReturn<T>`, which is flutter_rust_bridge's marker for
+// "hand this back synchronously rather than as a Future" -- it carries no data of its
+// own, it is a `SyncReturn<T>(pub T)` newtype. N-API has no equivalent concept: a NAPI
+// function returning a plain value is already synchronous. So the bridge unwraps with
+// `.0` and exposes the bare payload.
+//
+// Each macro below adds one parameter, because writing `$arg:ident` handling inline is
+// less clear than naming the arities actually in use.
+
+/// `fn() -> SyncReturn<String>`
+macro_rules! sync_string_0 {
+    ($( $rust_name:ident => $js_name:literal ),* $(,)?) => {
+        $(
+            #[napi(js_name = $js_name)]
+            pub fn $rust_name() -> String {
+                librustdesk::flutter_ffi::$rust_name().0
+            }
+        )*
+    };
+}
+
+/// `fn(String) -> SyncReturn<String>`
+macro_rules! sync_string_1 {
+    ($( $rust_name:ident => $js_name:literal ),* $(,)?) => {
+        $(
+            #[napi(js_name = $js_name)]
+            pub fn $rust_name(arg: String) -> String {
+                librustdesk::flutter_ffi::$rust_name(arg).0
+            }
+        )*
+    };
+}
+
+/// Options and identity reads that the Flutter side takes synchronously.
+sync_string_0! {
+    main_get_options_sync     => "mainGetOptionsSync",
+    main_get_app_name_sync    => "mainGetAppNameSync",
+    main_uri_prefix_sync      => "mainUriPrefixSync",
+    main_get_login_device_info => "mainGetLoginDeviceInfo",
+    get_local_kb_layout_type  => "getLocalKbLayoutType",
+}
+
+/// ...and the same reads keyed by an argument.
+sync_string_1! {
+    main_get_option_sync => "mainGetOptionSync",
+    main_get_peer_sync   => "mainGetPeerSync",
+}
+
+/// The next texture key the renderer wants to register an XComponent surface under.
+/// Plain i32, so it needs no unwrapping helper beyond `.0`.
+#[napi(js_name = "getNextTextureKey")]
+pub fn get_next_texture_key() -> i32 {
+    librustdesk::flutter_ffi::get_next_texture_key().0
+}
+
+/// How many live sessions a peer has. `usize` maps to a NAPI number.
+#[napi(js_name = "peerGetSessionsCount")]
+pub fn peer_get_sessions_count(id: String, conn_type: i32) -> u32 {
+    librustdesk::flutter_ffi::peer_get_sessions_count(id, conn_type).0 as u32
+}
