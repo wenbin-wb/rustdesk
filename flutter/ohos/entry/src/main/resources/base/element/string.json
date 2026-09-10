@@ -46,6 +46,7 @@
     { "name": "settings_logout", "value": "退出" },
     { "name": "settings_server", "value": "服务器与中继" },
     { "name": "settings_server_configure", "value": "配置中继 / 自建服务器" },
+    { "name": "settings_server_configure_hint", "value": "点击填写 ID / 中继 / API 与公钥" },
     { "name": "settings_server_current", "value": "当前服务器" },
     { "name": "settings_system", "value": "系统信息" },
     { "name": "settings_core_version", "value": "核心版本" },
@@ -78,6 +79,7 @@
     { "name": "dialog_server_save", "value": "保存" },
 
     { "name": "session_connecting", "value": "正在连接…" },
+    { "name": "session_request_sent", "value": "已提交连接请求（远程画面尚未接通）" },
     { "name": "session_disconnect", "value": "断开连接" },
     { "name": "session_target", "value": "目标设备" },
     { "name": "session_core_status", "value": "核心连接状态" },

@@ -70,26 +70,40 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
+  /**
+   * Lay the window out full screen and publish the areas the page must inset against.
+   *
+   * Wrapped in try/catch as a whole: this is best-effort presentation, and it runs from the
+   * loadContent callback, where a throw escapes. The per-call `.catch()` below only handles
+   * async rejection -- getMainWindowSync and getWindowAvoidArea are flagged as throwing
+   * synchronously, which `.catch()` does not cover. Cosmetics are not worth failing a launch
+   * for, and the rest of the app already treats this as best-effort.
+   */
   private applyImmersiveWindow(windowStage: window.WindowStage): void {
-    const win = windowStage.getMainWindowSync();
+    try {
+      const win = windowStage.getMainWindowSync();
 
-    // Full screen layout is what stops the system reserving a strip for the bars, which is
-    // what the window-coloured band at the top and bottom was.
-    win.setWindowLayoutFullScreen(true).catch(() => {});
+      // Full screen layout is what stops the system reserving a strip for the bars, which is
+      // what the window-coloured band at the top and bottom was.
+      win.setWindowLayoutFullScreen(true).catch(() => {});
 
-    // Bar icons sit on our own background rather than on a system-drawn bar, so state which
-    // surface they are over rather than leaving it to the default.
-    win.setWindowSystemBarProperties({
-      statusBarContentColor: '#000000',
-      navigationBarContentColor: '#000000'
-    }).catch(() => {});
+      // Bar icons sit on our own background rather than on a system-drawn bar, so state which
+      // surface they are over rather than leaving it to the default. Unavailable on 2in1, where
+      // there is no such bar.
+      win.setWindowSystemBarProperties({
+        statusBarContentColor: '#000000',
+        navigationBarContentColor: '#000000'
+      }).catch(() => {});
 
-    // A full-screen window means the framework no longer insets content: measured on device,
-    // the tab bar sat flush against y=2848, the last row of pixels. So the insets have to be
-    // read and applied by the page. Publishing the raw px here keeps the window arithmetic in
-    // the ability and the layout in the page.
-    this.publishAvoidArea(win, window.AvoidAreaType.TYPE_SYSTEM, 'statusBarInsetPx');
-    this.publishAvoidArea(win, window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, 'navIndicatorInsetPx');
+      // A full-screen window means the framework no longer insets content: measured on device,
+      // the tab bar sat flush against y=2848, the last row of pixels. So the insets have to be
+      // read and applied by the page. Publishing the raw px here keeps the window arithmetic in
+      // the ability and the layout in the page.
+      this.publishAvoidArea(win, window.AvoidAreaType.TYPE_SYSTEM, 'statusBarInsetPx');
+      this.publishAvoidArea(win, window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, 'navIndicatorInsetPx');
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'immersive window setup skipped: %{public}s', JSON.stringify(e));
+    }
   }
 
   /**

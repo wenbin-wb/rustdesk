@@ -112,6 +112,15 @@ struct Index {
   @State private passwordTargetId: string = '';
 
   /**
+   * Bumped on every password-dialog open so the dialog clears its fields.
+   *
+   * The dialog instance is reused across opens; a watched value the page changes explicitly
+   * clears the previously typed password even when the peer is the same, which a @Watch on the
+   * target alone cannot do.
+   */
+  @State private passwordOpenRevision: number = 0;
+
+  /**
    * Held as a member, not as a local.
    *
    * This dialog used to be built into a local `const controller` inside the open method. The
@@ -123,6 +132,7 @@ struct Index {
   private passwordDialogController: CustomDialogController = new CustomDialogController({
     builder: PasswordDialog({
       targetId: $passwordTargetId,
+      openRevision: $passwordOpenRevision,
       onVerify: (password: string, remember: boolean) => {
         this.handlePasswordVerified(password, remember);
       }
@@ -225,11 +235,19 @@ struct Index {
         return;
       }
       this.openPasswordDialog(targetId);
+    }).catch((e: Object) => {
+      // Started from a tap handler, so nothing above catches it: an unhandled rejection here
+      // would surface as a crash rather than as a failed action. Bookkeeping the peer is not
+      // worth that, so report and carry on to the password step.
+      hilog.error(DOMAIN, TAG, 'could not record the peer: %{public}s', JSON.stringify(e));
+      this.openPasswordDialog(targetId);
     });
   }
 
   private openPasswordDialog(targetId: string): void {
     this.passwordTargetId = targetId;
+    // Bumped after the target, so the dialog sees the new peer and the clear in one update.
+    this.passwordOpenRevision++;
     this.passwordDialogController.open();
   }
 
@@ -241,11 +259,21 @@ struct Index {
       : config.removePeerPassword(rawId);
     save.then(() => {
       this.isInRemoteSession = true;
+    }).catch((e: Object) => {
+      hilog.error(DOMAIN, TAG, 'could not store the peer password: %{public}s', JSON.stringify(e));
+      // The password was accepted; only remembering it failed, so continue into the session.
+      this.isInRemoteSession = true;
     });
   }
 
   private async handleLogout(): Promise<void> {
-    await AuthService.logout();
+    try {
+      await AuthService.logout();
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'logout failed: %{public}s', JSON.stringify(e));
+    }
+    // Clear the UI state regardless: leaving the profile on screen after the user asked to sign
+    // out would contradict the action they took.
     this.userProfile = { username: '', email: '', token: '', avatar: '', isLoggedIn: false };
   }
 

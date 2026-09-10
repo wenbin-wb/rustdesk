@@ -59,8 +59,10 @@ export struct SettingsTab {
       if (this.apiServer.length > 0) {
         this.infoRow($r('app.string.dialog_server_api'), this.apiServer)
       }
+      // The hint has to differ from the row above it. It used to repeat
+      // settings_server_current, so "当前服务器" appeared twice in a row.
       this.actionRow($r('app.string.settings_server_configure'),
-        $r('app.string.settings_server_current'),
+        $r('app.string.settings_server_configure_hint'),
         () => { this.onOpenServerSettings(); })
 
       this.sectionHeader($r('app.string.settings_system'))

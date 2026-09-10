@@ -277,6 +277,24 @@ export class ConfigManager {
     await this.pref.flush();
   }
 
+  /**
+   * Remove every stored peer in one pass.
+   *
+   * Callers must use this rather than removing peers one at a time. Each removal is a
+   * read-modify-write of the single 'recent_peers' key: read the list, filter one id, write
+   * the list back. Running several of those concurrently interleaves them at their awaits, so
+   * the last writer wins and ids removed by earlier writers reappear -- clearing [A,B,C] could
+   * finish with entries still present. One write of an empty list cannot lose an update.
+   */
+  public async clearRecentPeers(): Promise<void> {
+    await this.ensureInit();
+    if (!this.pref) {
+      return;
+    }
+    await this.pref.put('recent_peers', JSON.stringify([]));
+    await this.pref.flush();
+  }
+
   public async removeRecentPeer(id: string): Promise<void> {
     await this.ensureInit();
     if (!this.pref) {

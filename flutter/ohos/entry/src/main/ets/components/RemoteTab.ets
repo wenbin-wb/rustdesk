@@ -39,7 +39,6 @@ export struct RemoteTab {
   @State private myId: string = '';
   @State private oneTimePassword: string = '';
   @State private connectionStatus: ResourceStr = $r('app.string.status_ready');
-  @State private isConnecting: boolean = false;
   @State private subTab: number = 0;
   @State private recentDevices: StoredPeer[] = [];
 
@@ -87,11 +86,26 @@ export struct RemoteTab {
   }
 
   private loadPeers(): void {
+    // Guarded like DevicesTab's identical call: this runs from aboutToAppear, and an
+    // unhandled rejection on a startup path takes the process down.
     ConfigManager.getInstance().getRecentPeers().then((peers: StoredPeer[]) => {
       this.recentDevices = peers;
+    }).catch((e: Object) => {
+      hilog.warn(DOMAIN, TAG, 'could not load recent peers: %{public}s', JSON.stringify(e));
     });
   }
 
+  /**
+   * Validate the entered id and hand it to the page.
+   *
+   * The "connecting" line is shown only while this synchronous step is running, and the actual
+   * outcome is unknown to this component, so the strip says what it knows: the request has been
+   * passed on. It previously stayed on "正在连接…" forever after the first attempt -- including
+   * after the password prompt was cancelled -- because nothing ever wrote it back.
+   *
+   * isConnecting was removed with it: it was set true and false in the same synchronous block,
+   * so it could never be observed true and the button it gated never actually disabled.
+   */
   private submit(): void {
     const raw = this.remoteIdInput.replace(/\s+/g, '');
     if (raw.length === 0) {
@@ -102,10 +116,8 @@ export struct RemoteTab {
       this.connectionStatus = $r('app.string.error_self_id');
       return;
     }
-    this.isConnecting = true;
-    this.connectionStatus = $r('app.string.session_connecting');
+    this.connectionStatus = $r('app.string.session_request_sent');
     this.onConnect(this.remoteIdInput);
-    this.isConnecting = false;
   }
 
   build() {
@@ -152,7 +164,7 @@ export struct RemoteTab {
             .backgroundColor($r('app.color.brand'))
             .fontColor($r('app.color.on_brand'))
             .borderRadius(12)
-            .enabled(!this.isConnecting && this.remoteIdInput.length > 0)
+            .enabled(this.remoteIdInput.length > 0)
             .onClick(() => {
               this.submit();
             })

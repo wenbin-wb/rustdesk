@@ -149,17 +149,15 @@ export function getOption(key: string): string {
 }
 
 /**
- * Write several core options at once.
+ * Write one core option.
  *
- * Keys are the core's own option names (libs/base/src/config/keys.rs), not the UI's. An
- * empty value clears the option, which is how the core returns to its built-in default --
- * for the server options, the public servers.
+ * Deliberately the only option writer exposed. The bridge also has a bulk call, which assigns
+ * the core's entire option map rather than merging and skips the per-key side effects below --
+ * using it once would silently drop any option set elsewhere. Callers set one key at a time.
+ *
+ * Keys are the core's own option names (libs/base/src/config/keys.rs). An empty value clears
+ * the option, which is how the core returns to its built-in default.
  */
-export function setOptions(options: Record<string, string>): void {
-  native.mainSetOptions(JSON.stringify(options));
-}
-
-/** Write one core option. */
 export function setOption(key: string, value: string): void {
   native.mainSetOption(key, value);
 }

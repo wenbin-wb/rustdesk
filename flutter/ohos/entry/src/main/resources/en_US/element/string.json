@@ -46,6 +46,7 @@
     { "name": "settings_logout", "value": "Sign out" },
     { "name": "settings_server", "value": "Server and relay" },
     { "name": "settings_server_configure", "value": "Configure relay / self-hosted server" },
+    { "name": "settings_server_configure_hint", "value": "Tap to set the ID, relay, API server and key" },
     { "name": "settings_server_current", "value": "Current server" },
     { "name": "settings_system", "value": "System" },
     { "name": "settings_core_version", "value": "Core version" },
@@ -78,6 +79,7 @@
     { "name": "dialog_server_save", "value": "Save" },
 
     { "name": "session_connecting", "value": "Connecting…" },
+    { "name": "session_request_sent", "value": "Connection request submitted (remote video not wired yet)" },
     { "name": "session_disconnect", "value": "Disconnect" },
     { "name": "session_target", "value": "Target device" },
     { "name": "session_core_status", "value": "Core status" },

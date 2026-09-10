@@ -61,20 +61,31 @@ export struct DevicesTab {
     config.removeRecentPeer(device.id).then(() => {
       return config.removePeerPassword(device.id);
     }).then(() => {
-      this.reload();
+      // Only notify: the parent bumps peersRevision, and this tab's own @Watch on it reloads.
+      // Calling reload() here as well would read the store twice for no benefit.
+      this.onPeersMutated();
+    }).catch((e: Object) => {
+      hilog.error(DOMAIN, TAG, 'could not remove the stored peer: %{public}s', JSON.stringify(e));
       this.onPeersMutated();
     });
   }
 
   private clearAll(): void {
     const config = ConfigManager.getInstance();
-    const work: Promise<void>[] = [];
-    this.devices.forEach((device: StoredPeer) => {
-      work.push(config.removeRecentPeer(device.id));
-      work.push(config.removePeerPassword(device.id));
-    });
-    Promise.all(work).then(() => {
-      this.reload();
+    // One write for the list itself, then the per-id password deletions. The passwords live on
+    // distinct keys so doing them concurrently is safe; the peer list is a single key and must
+    // not be written by several overlapping read-modify-write cycles.
+    config.clearRecentPeers().then(() => {
+      const work: Promise<void>[] = [];
+      this.devices.forEach((device: StoredPeer) => {
+        work.push(config.removePeerPassword(device.id));
+      });
+      return Promise.all(work);
+    }).then(() => {
+      // Only notify; this tab reloads through its own @Watch on peersRevision.
+      this.onPeersMutated();
+    }).catch((e: Object) => {
+      hilog.error(DOMAIN, TAG, 'could not clear stored peers: %{public}s', JSON.stringify(e));
       this.onPeersMutated();
     });
   }

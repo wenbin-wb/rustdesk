@@ -1,9 +1,22 @@
 import { pasteboard } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskClipboard';
 
 export class ClipboardBridge {
   private static instance: ClipboardBridge | null = null;
   private onClipboardChangedCallback?: (text: string) => void;
-  private sysPasteboard: pasteboard.SystemPasteboard = pasteboard.getSystemPasteboard();
+
+  /**
+   * Resolved lazily, not in a field initializer.
+   *
+   * A field initializer runs when getInstance() constructs this, which happens from
+   * EntryAbility's own field initializer -- that is, during ability construction, before
+   * onCreate and outside any try/catch. A throw there would fail the launch. Resolving on
+   * first use keeps the failure inside the guarded methods below.
+   */
+  private sysPasteboard: pasteboard.SystemPasteboard | null = null;
 
   private constructor() {}
 
@@ -14,10 +27,26 @@ export class ClipboardBridge {
     return ClipboardBridge.instance;
   }
 
+  private getPasteboard(): pasteboard.SystemPasteboard | null {
+    if (!this.sysPasteboard) {
+      try {
+        this.sysPasteboard = pasteboard.getSystemPasteboard();
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'clipboard unavailable: %{public}s', JSON.stringify(e));
+        return null;
+      }
+    }
+    return this.sysPasteboard;
+  }
+
   public init(callback?: (text: string) => void): void {
     this.onClipboardChangedCallback = callback;
+    const board = this.getPasteboard();
+    if (!board) {
+      return;
+    }
     try {
-      this.sysPasteboard.on('update', () => {
+      board.on('update', () => {
         this.notifyClipboardUpdate();
       });
     } catch {
@@ -26,8 +55,12 @@ export class ClipboardBridge {
   }
 
   public async getText(): Promise<string> {
+    const board = this.getPasteboard();
+    if (!board) {
+      return '';
+    }
     try {
-      const pasteData = await this.sysPasteboard.getData();
+      const pasteData = await board.getData();
       if (pasteData && pasteData.getRecordCount() > 0) {
         return pasteData.getPrimaryText() ?? '';
       }
@@ -38,9 +71,13 @@ export class ClipboardBridge {
   }
 
   public async setText(text: string): Promise<boolean> {
+    const board = this.getPasteboard();
+    if (!board) {
+      return false;
+    }
     try {
       const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
-      await this.sysPasteboard.setData(pasteData);
+      await board.setData(pasteData);
       return true;
     } catch {
       return false;
