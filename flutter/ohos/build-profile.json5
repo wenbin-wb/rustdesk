@@ -7,11 +7,11 @@
         "material": {
           "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_ohos_PXtL7_WOQWNdCq-QifPKt_tHy5VGajZLXjwMs8f7XAw=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BA473405C55834F5206EF49440AAE4DD36CC9BFD51D2C28149EA03637E705FBEA400CE3437333AF",
+          "keyPassword": "0000001B7F946DF178FF913DFE16A871A0B96AE15429C852BCC920A35224151BE0BDF729CB52E39CA7DD2A",
           "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_ohos_PXtL7_WOQWNdCq-QifPKt_tHy5VGajZLXjwMs8f7XAw=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_ohos_PXtL7_WOQWNdCq-QifPKt_tHy5VGajZLXjwMs8f7XAw=.p12",
-          "storePassword": "0000001BFE92F580640C0D7308F00FB4D684EE279634BEF95E9EF844B92C637C0743807ABCA51FBD472D04"
+          "storePassword": "0000001BBFD8CBBB3AF91BE9C6CB8198E552C04AE9CF31D58525851B382017EA2733B890729B8850DC4581"
         }
       }
     ],
@@ -19,7 +19,7 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "5.0.0(12)",
+        "compatibleSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "targetSdkVersion": "26.0.0",
         "buildOption": {

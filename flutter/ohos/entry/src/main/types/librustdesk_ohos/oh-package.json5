@@ -1,0 +1,6 @@
+{
+  "name": "librustdesk_ohos.so",
+  "types": "./index.d.ts",
+  "version": "1.5.0",
+  "description": "Type declaration for the RustDesk Node-API module built by flutter/ohos/build_bridge.ps1"
+}

@@ -116,6 +116,53 @@ $z.Entries | Where-Object { $_.FullName -match "\.so$" } | Select-Object FullNam
 
 ---
 
+## 4.1 已实测：闪退根因与修复（2026-09-10 真机 LMR-AL10 / API 26）
+
+**症状**：装上后一启动就闪退，无 native crash。
+
+**取崩溃详情**（这是唯一能看到 ArkTS 层异常的办法，`hilog` 里看不到）：
+
+```powershell
+$hdc = "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"
+# 先列出现有崩溃记录，取最新一条的文件名
+& $hdc shell "hidumper -s 1201 -a '-p Faultlogger'"
+# 再用 -f 取该条的完整内容
+& $hdc shell "hidumper -s 1201 -a '-p Faultlogger -f jscrash-com.carriez.flutter_hbb-20020392-20260910232709'"
+```
+
+**根因**：
+
+```
+Reason: TypeError
+Error message: Cannot read property mainGetMyId of undefined
+    at getMyId (entry/src/main/ets/platform/RustDeskBridge.ets:78:17)
+    at loadDeviceIdentity (entry/src/main/ets/components/RemoteTab.ets:54:17)
+```
+
+`import nativeModule from 'librustdesk_ohos.so'` **不抛异常**，而是给出
+**`undefined`** —— 因为**缺少 `.d.ts` 类型声明**，鸿蒙无法解析该原生模块。
+hvigor 在编译期只给一条警告：
+
+> *Currently module for 'librustdesk_ohos.so' is not verified. If you're importing napi,
+> its verification will be enabled in later SDK version. Please make sure the corresponding
+> **.d.ts file is provided** and the napis are correctly declared.*
+
+**修复**：`entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}` +
+`entry/oh-package.json5` 里声明 `"librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"`。
+**修复后应用能正常启动并驻留**，不再产生 jscrash。
+
+**排除掉的假设**（不要再走一遍）：设备缺 `libace_napi.z.so`（SELinux 让 `ls` 对存在与否都报
+"No such file"，该检查不可靠）；libc++ ABI 不匹配；RUNPATH 含构建机路径。
+
+**隔离实验手法**（定位"是原生模块还是 UI"极有效）：临时把 `RustDeskBridge.ets`
+换成不导入 `.so` 的同名桩函数，重新打包运行 —— 桩版能跑而真实版崩，即可确定问题在 `.so` 导入。
+
+> **机器可读的通用教训**：ArkTS 层异常（`jscrash`）在 `hilog` 里**看不到堆栈**，
+> 必须用 `hidumper -s 1201 -a '-p Faultlogger'`。且 `aa start` 会因
+> **设备锁屏**而失败（`Error Code:10106102`），与代码无关，测试前请先解锁。
+
+---
+
 ## 5. ⚠️ 尚未实现 —— 不要当 BUG 报
 
 本次交付的是**核心可编译 + 桥接可用 + UI 按鸿蒙规范重写**，以下**有意未做**（计划见 `PLAN.md`）：

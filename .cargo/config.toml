@@ -33,6 +33,12 @@ rustflags = [
     "-C", "link-arg=--target=aarch64-linux-ohos",
     "-C", "link-arg=--sysroot=C:/ohos-ndk/sysroot",
     "-C", "link-arg=-D__MUSL__",
+    # The workspace sets rpath = true in [profile.release], which stamps a build-machine
+    # path into the shipped module's RUNPATH:
+    #   $ORIGIN/..\..\..\..\..\..\.rustup\toolchains\stable-x86_64-pc-windows-gnu\lib\...
+    # That directory cannot exist on a device and leaks the build host's layout into the
+    # artifact, so turn it off for this target.
+    "-C", "rpath=no",
 ]
 
 # To build for the DevEco emulator instead of a device, add the same block for

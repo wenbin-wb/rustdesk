@@ -5,6 +5,11 @@
   "main": "src/main/ets/entryability/EntryAbility.ets",
   "author": "Purslane Tech Pte. Ltd.",
   "license": "GPL-3.0",
-  "dependencies": {}
+  "dependencies": {
+    // Declares the shape of the native module ArkTS imports. Without this entry the
+    // compiler cannot resolve 'librustdesk_ohos.so' and the default import is undefined at
+    // runtime -- which surfaces as a jscrash on the first call, not as a build error.
+    "librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"
+  }
 }
 

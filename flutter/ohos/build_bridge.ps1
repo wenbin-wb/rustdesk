@@ -31,8 +31,11 @@ $here   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo   = (Resolve-Path (Join-Path $here "..\..")).Path
 $native = Join-Path $here "native"
 
+# The space-free junction to the DevEco OHOS NDK, created by setup_ohos_toolchain.ps1.
+$NdkLink = "C:\ohos-ndk"
+
 # napi-build-ohos reads OHOS_NDK_HOME; without it the build script panics.
-$env:OHOS_NDK_HOME = "C:\ohos-ndk"
+$env:OHOS_NDK_HOME = $NdkLink
 
 if (-not $DeployOnly) {
   Write-Host "Building the core + bridge for aarch64-unknown-linux-ohos..." -ForegroundColor Cyan
@@ -57,6 +60,29 @@ $destDir = Join-Path $here "entry\libs\arm64-v8a"
 New-Item -ItemType Directory -Force -Path $destDir | Out-Null
 $dest = Join-Path $destDir "librustdesk_ohos.so"
 Copy-Item $built $dest -Force
+
+# Bundle the libc++ the core was linked against.
+#
+# The core needs libc++_shared.so, and the device ships its own. Those are not the same
+# build: on the LMR-AL10 used for testing the system copy is 1291536 bytes dated 2024-06-06
+# while this SDK's is 1262504 bytes dated 2026-08-27. A newer libc++ references symbols an
+# older one does not export, and dlopen then fails with an unresolved symbol -- which
+# surfaces as a jscrash the moment ArkTS imports the module, with nothing in hilog.
+# Shipping the matching copy next to the module makes the app use it instead of the
+# system's, which is the same thing the Android NDK guidance says to do.
+$libcxx = Join-Path $NdkLink "llvm\lib\arm64-v8a\libc++_shared.so"
+if (-not (Test-Path $libcxx)) {
+  # The NDK keeps it under the llvm lib dir named after the target triple.
+  $libcxx = "$NdkLink\llvm\lib\aarch64-linux-ohos\libc++_shared.so"
+}
+if (Test-Path $libcxx) {
+  Copy-Item $libcxx (Join-Path $destDir "libc++_shared.so") -Force
+  $lc = [math]::Round((Get-Item (Join-Path $destDir "libc++_shared.so")).Length / 1KB, 0)
+  Write-Host "Bundled libc++_shared.so ($lc KB)" -ForegroundColor Green
+} else {
+  Write-Host "WARNING: could not find libc++_shared.so under $NdkLink\llvm\lib; the app will" -ForegroundColor Yellow
+  Write-Host "         fall back to the device's copy, which may be an incompatible version." -ForegroundColor Yellow
+}
 
 $mb = [math]::Round((Get-Item $dest).Length / 1MB, 2)
 Write-Host "Deployed $mb MB -> $dest" -ForegroundColor Green

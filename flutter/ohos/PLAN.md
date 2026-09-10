@@ -141,7 +141,21 @@
 - [ ] 🔴 **核心生命周期未接通（审核发现的 P2 阻塞项）**
   - ArkTS 侧只调了读取接口，**未调用 `mainInit` / `mainDeviceId` / `mainDeviceName` / `mainSetHomeDir`**，故 `Config::get_id()` 在未初始化状态下会落到 `gen_id()` 的随机分支 → 设备 ID 可能为空或每次冷启动都变（与旧 mock 症状无法区分）
   - 需：桥接导出上述 4 个接口 → `EntryAbility` 启动时用应用沙盒目录调用 → 再让 `getMyId()` 有真实意义
-- [ ] NAPI 模块缺少 `.d.ts`：hvigor 警告 *"module for 'librustdesk_ohos.so' is not verified ... make sure the corresponding .d.ts file is provided"*，并说明**后续 SDK 版本会强制校验**。当前仅警告，但应补 `librustdesk_ohos.d.ts`
+- [x] **NAPI 模块的 `.d.ts` 类型声明** ✅ —— **真机闪退的根因就是缺这个文件**
+  - 真机崩溃日志（`hidumper -s 1201 -a '-p Faultlogger -f <file>'`）给出确切原因：
+    ```
+    Reason: TypeError
+    Error message: Cannot read property mainGetMyId of undefined
+        at getMyId (entry/src/main/ets/platform/RustDeskBridge.ets:78:17)
+    ```
+  - 即 `import nativeModule from 'librustdesk_ohos.so'` **不抛异常**，而是 **`nativeModule === undefined`**
+    —— 正是 hvigor 警告 *"module ... is not verified ... make sure the corresponding .d.ts file is provided"* 的实际后果
+  - 修复：新增 `entry/src/main/types/librustdesk_ohos/{index.d.ts, oh-package.json5}`（33 个成员），
+    并在 `entry/oh-package.json5` 加 `"librustdesk_ohos.so": "file:./src/main/types/librustdesk_ohos"`
+  - ⚠️ **坑**：类型声明**不能放 `entry/src/main/cpp/` 下** —— 该目录一旦存在，hvigor 会认为有 CMake 原生工程，
+    报 `externalNativeOptions/path does not exist`。放 `src/main/types/` 即可
+  - 排除过程（记录以免重走）：曾怀疑 ① 设备缺 `libace_napi.z.so` ② libc++ ABI 版本不匹配 ③ RUNPATH 污染，
+    **均非根因**。用"临时把 `RustDeskBridge.ets` 换成无 `.so` 导入的桩"做隔离实验，确认崩溃只随 `.so` 导入出现
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
 - [x] **打包接入 HAP：端到端链路打通** ✅

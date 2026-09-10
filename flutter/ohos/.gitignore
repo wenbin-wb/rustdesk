@@ -1,6 +1,8 @@
 .hvigor/
 .preview/
 build/
+# Created by the native build tasks; appears as soon as cpp/ exists under src/main.
+.cxx/
 oh_modules/
 *.hap
 *.hsp
