@@ -7,3 +7,5 @@ oh_modules/
 *.har
 local.properties
 node_modules/
+!**/resources/**/media/*.png
+!**/resources/**/media/*.svg
