@@ -1,5 +1,5 @@
 import { AuthService } from '../platform/AuthService';
-import { ConfigManager, UserProfile } from '../platform/ConfigStorage';
+import { UserProfile } from '../platform/ConfigStorage';
 
 @CustomDialog
 export struct LoginDialog {
@@ -36,17 +36,39 @@ export struct LoginDialog {
     }
   }
 
+  @Builder
+  private field(label: ResourceStr, placeholder: ResourceStr, value: string, isPassword: boolean,
+                onText: (v: string) => void) {
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize($r('app.float.font_caption'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+      TextInput({ text: value, placeholder: placeholder })
+        .type(isPassword ? InputType.Password : InputType.Normal)
+        .height(44)
+        .fontSize($r('app.float.font_body'))
+        .fontColor($r('app.color.input_text'))
+        .placeholderColor($r('app.color.input_placeholder'))
+        .backgroundColor($r('app.color.input_bg'))
+        .borderRadius($r('app.float.radius_control'))
+        .onChange(onText)
+    }
+    .width('100%')
+  }
+
   build() {
     Column({ space: 16 }) {
       Row() {
-        Text('登录 RustDesk 账号')
-          .fontSize(18)
+        Text($r('app.string.dialog_login_title'))
+          .fontSize($r('app.float.font_subtitle'))
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1D2129')
+          .fontColor($r('app.color.text_title'))
         Blank()
-        Button('✕')
-          .fontSize(16)
-          .fontColor('#86909C')
+        Button($r('app.string.common_close'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
           .backgroundColor(Color.Transparent)
           .onClick(() => {
             this.controller.close();
@@ -54,62 +76,38 @@ export struct LoginDialog {
       }
       .width('100%')
 
-      Text('登录后可同步远程设备地址簿、共享访问策略与团队设备配置。')
-        .fontSize(12)
-        .fontColor('#86909C')
+      Text($r('app.string.dialog_login_hint'))
+        .fontSize($r('app.float.font_caption'))
+        .fontColor($r('app.color.text_hint'))
         .width('100%')
 
       Column({ space: 12 }) {
-        Column({ space: 4 }) {
-          Text('账号 / 邮箱')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#4E5969')
-            .width('100%')
-          TextInput({ text: this.account, placeholder: '用户名或注册邮箱' })
-            .height(44)
-            .fontSize(14)
-            .backgroundColor('#F2F3F5')
-            .borderRadius(6)
-            .onChange((val: string) => {
-              this.account = val;
-            })
-        }
-
-        Column({ space: 4 }) {
-          Text('密码')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#4E5969')
-            .width('100%')
-          TextInput({ text: this.password, placeholder: '账户密码' })
-            .type(InputType.Password)
-            .height(44)
-            .fontSize(14)
-            .backgroundColor('#F2F3F5')
-            .borderRadius(6)
-            .onChange((val: string) => {
-              this.password = val;
-            })
-        }
+        this.field($r('app.string.dialog_login_account'),
+          $r('app.string.dialog_login_account_placeholder'), this.account, false,
+          (v: string) => { this.account = v; })
+        this.field($r('app.string.dialog_login_password'),
+          $r('app.string.dialog_login_password_placeholder'), this.password, true,
+          (v: string) => { this.password = v; })
       }
       .width('100%')
 
       if (this.errorMsg.length > 0) {
         Text(this.errorMsg)
-          .fontSize(12)
-          .fontColor('#F53F3F')
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.danger'))
           .width('100%')
       }
 
-      Button(this.isLoading ? '正在认证...' : '立即登录')
+      Button(this.isLoading
+        ? $r('app.string.dialog_login_submitting')
+        : $r('app.string.dialog_login_submit'))
         .width('100%')
         .height(42)
-        .fontSize(15)
+        .fontSize($r('app.float.font_body'))
         .fontWeight(FontWeight.Medium)
-        .backgroundColor('#007DFF')
-        .fontColor('#FFFFFF')
-        .borderRadius(8)
+        .backgroundColor($r('app.color.brand'))
+        .fontColor($r('app.color.on_brand'))
+        .borderRadius($r('app.float.radius_control'))
         .enabled(!this.isLoading)
         .onClick(() => {
           this.doLogin();
@@ -117,7 +115,7 @@ export struct LoginDialog {
     }
     .width('92%')
     .padding(20)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(14)
+    .backgroundColor($r('app.color.dialog_bg'))
+    .borderRadius($r('app.float.radius_card'))
   }
 }

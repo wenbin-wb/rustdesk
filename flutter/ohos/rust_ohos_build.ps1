@@ -75,8 +75,19 @@ $env:CFLAGS_aarch64_unknown_linux_ohos   = "--target=aarch64-linux-ohos --sysroo
 $env:CXXFLAGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=$sysroot -D__MUSL__"
 
 # Prebuilt OpenSSL for ohos (openssl-sys looks up <TRIPLE>_OPENSSL_DIR).
+#
+# OPENSSL_STATIC matters as much as the directory. The prebuilt ships both .a and .so, and
+# openssl-sys prefers the shared ones, which stamps NEEDED: libssl.so / libcrypto.so into the
+# module. HarmonyOS has no such libraries, so the module fails to load with
+# "Error loading shared library libssl.so". Harmless while nothing referenced OpenSSL, and it
+# only surfaced once the rendezvous code was linked in.
+#
+# OPENSSL_STATIC is a global variable, but nothing on the HOST side needs OpenSSL --
+# hbb_common, which is the only build-dependency involved, has no OpenSSL dependency -- so
+# setting it here cannot redirect a host link the way SODIUM_LIB_DIR did.
 if (Test-Path $openssl) {
   $env:AARCH64_UNKNOWN_LINUX_OHOS_OPENSSL_DIR = $openssl
+  $env:OPENSSL_STATIC = "1"
 }
 
 # libsodium for ohos is attached through [target.aarch64-unknown-linux-ohos] rustflags in

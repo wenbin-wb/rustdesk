@@ -67,53 +67,87 @@ New-Item -ItemType Directory -Force -Path "$bld\obj", "$bld\include\sodium" | Ou
 # ---------------------------------------------------------------------------
 # Collect the source list from Makefile.am.
 #
-# The file wraps its list over several conditional blocks. For aarch64 the choices are:
-# HAVE_TI_MODE true (it has 128-bit ints), HAVE_AMD64_ASM and HAVE_AVX_ASM false, MINIMAL
-# false. Parsing the real file rather than hardcoding a list keeps this correct across
-# libsodium releases.
+# The file wraps its lists over automake conditionals, so both the conditions and the
+# if/else structure have to be evaluated. Getting this wrong is not a build error: a missing
+# .c file simply leaves a symbol undefined, and the failure only appears on device as
+# "relocating failed: symbol not found". That is exactly what happened with
+# crypto_stream_salsa20_ref_implementation, which lives in the ELSE branch of
+# `if HAVE_AMD64_ASM` -- a branch an x86 reading of the file skips but aarch64 needs.
+#
+# Parsing the real file rather than hardcoding a list keeps this correct across libsodium
+# releases, so it is worth doing properly.
+function Test-AutomakeCondition([string]$cond) {
+  switch ($cond) {
+    # aarch64 has native 128-bit integers, which selects the fe_51 ed25519 representation.
+    'HAVE_TI_MODE'    { return $true }
+    # Both are x86 assembly paths; their else branches carry the portable implementations.
+    'HAVE_AMD64_ASM'  { return $false }
+    'HAVE_AVX_ASM'    { return $false }
+    '!HAVE_AMD64_ASM' { return $true }
+    # Full library, not the trimmed MINIMAL build.
+    '!MINIMAL'        { return $true }
+    # Not WebAssembly.
+    '!EMSCRIPTEN'     { return $true }
+    default {
+      Write-Host "   note: unhandled automake condition '$cond' treated as false" -ForegroundColor Yellow
+      return $false
+    }
+  }
+}
+
 $makefile = Get-Content "$src\src\libsodium\Makefile.am"
 $sources = New-Object System.Collections.Generic.List[string]
-$inList = $false       # inside a libsodium_la_SOURCES continuation
-$skipBlock = $false    # inside a block we must not take
-$depth = 0
+
+# librdrand_la_SOURCES is a separate archive, but `libsodium_la_LIBADD += librdrand.la`
+# folds it into libsodium when not building for wasm, so its sources belong here too.
+$wantedLists = 'libsodium_la_SOURCES', 'librdrand_la_SOURCES'
+
+$inList = $false
+$condStack = New-Object System.Collections.Generic.List[bool]
 
 foreach ($line in $makefile) {
   $t = $line.TrimEnd()
 
-  if ($t -match '^libsodium_la_SOURCES\s*(\+?=)') {
-    # A bare '=' starts the base list; '+=' appends from a conditional block.
-    $inList = -not $skipBlock
+  if ($t -match '^if\s+(.+)$') {
+    $condStack.Add((Test-AutomakeCondition $Matches[1].Trim()))
     continue
   }
-  if ($t -match '^[A-Za-z_][A-Za-z0-9_]*\s*=' -or $t -match '^[A-Za-z_][A-Za-z0-9_]*\s*\+=' -or $t -match '^noinst_') {
-    $inList = $false
-  }
-
-  if ($t -match '^if\s+(.*)$') {
-    $cond = $Matches[1].Trim()
-    $depth++
-    # Only HAVE_TI_MODE and !MINIMAL contribute on this target.
-    if ($cond -ne 'HAVE_TI_MODE' -and $cond -ne '!MINIMAL') { $skipBlock = $true }
+  if ($t -match '^else\s*$') {
+    if ($condStack.Count -gt 0) { $condStack[$condStack.Count - 1] = -not $condStack[$condStack.Count - 1] }
     continue
   }
-  if ($t -match '^else') {
-    # The else of HAVE_TI_MODE (fe_25_5) does not apply, and neither does any else we reach.
-    $skipBlock = $true
-    continue
-  }
-  if ($t -match '^endif') {
-    $depth--
-    if ($depth -le 0) { $skipBlock = $false; $depth = 0 }
+  if ($t -match '^endif\b') {
+    if ($condStack.Count -gt 0) { $condStack.RemoveAt($condStack.Count - 1) }
     continue
   }
 
-  if ($inList -and -not $skipBlock -and $t -match '^\s*(\S+\.c)\s*\\?\s*$') {
-    $sources.Add($Matches[1])
+  if ($t -match '^([A-Za-z_][A-Za-z0-9_]*)\s*\+?=') {
+    # Any assignment ends the previous list; only the ones we want start a new one.
+    $inList = $wantedLists -contains $Matches[1]
+    continue
+  }
+
+  if ($inList -and $t -match '^\s*(\S+\.c)\s*\\?\s*$') {
+    $active = $true
+    foreach ($b in $condStack) { if (-not $b) { $active = $false; break } }
+    if ($active) { $sources.Add($Matches[1]) }
   }
 }
 
 if ($sources.Count -lt 50) {
   throw "parsed only $($sources.Count) sources from Makefile.am; the parser needs updating"
+}
+
+# Guard against the else-branch mistake that caused the salsa20 symbol failure: aarch64 must
+# take the portable implementations, so these must be present.
+foreach ($required in @(
+  'crypto_stream/salsa20/ref/salsa20_ref.c',
+  'randombytes/sysrandom/randombytes_sysrandom.c',
+  'randombytes/internal/randombytes_internal_random.c'
+)) {
+  if (-not ($sources -contains $required)) {
+    throw "expected source missing from the parse: $required"
+  }
 }
 
 # Drop anything from an x86-only directory. These live in separate convenience libraries

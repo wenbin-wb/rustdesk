@@ -21,6 +21,13 @@
     { "name": "divider", "value": "#33182431" },
     { "name": "border_subtle", "value": "#19182431" },
 
+    { "name": "input_bg", "value": "#F2F3F5" },
+    { "name": "input_text", "value": "#182431" },
+    { "name": "input_placeholder", "value": "#99182431" },
+
+    { "name": "dialog_bg", "value": "#FFFFFF" },
+    { "name": "mask", "value": "#33182431" },
+
     { "name": "status_online", "value": "#64BB5C" },
     { "name": "status_offline", "value": "#E84026" },
     { "name": "status_online_bg", "value": "#1A64BB5C" },

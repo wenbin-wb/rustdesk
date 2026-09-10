@@ -10,14 +10,14 @@ export struct PasswordDialog {
   build() {
     Column({ space: 14 }) {
       Row() {
-        Text('验证远程访问密码')
-          .fontSize(18)
+        Text($r('app.string.dialog_password_title'))
+          .fontSize($r('app.float.font_subtitle'))
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1D2129')
+          .fontColor($r('app.color.text_title'))
         Blank()
-        Button('✕')
-          .fontSize(16)
-          .fontColor('#86909C')
+        Button($r('app.string.common_close'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
           .backgroundColor(Color.Transparent)
           .onClick(() => {
             this.controller.close();
@@ -25,21 +25,29 @@ export struct PasswordDialog {
       }
       .width('100%')
 
-      Text(`安全加密通道已建立，请输入远程设备 [${this.targetId}] 的临时口令或固定密码。`)
-        .fontSize(13)
-        .fontColor('#4E5969')
+      Text($r('app.string.dialog_password_hint'))
+        .fontSize($r('app.float.font_caption'))
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      Text(this.targetId)
+        .fontSize($r('app.float.font_subtitle'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.brand'))
         .width('100%')
 
       Column({ space: 6 }) {
         TextInput({
           text: this.passwordInput,
-          placeholder: '输入远程设备密码'
+          placeholder: $r('app.string.dialog_password_placeholder')
         })
           .type(InputType.Password)
           .height(44)
-          .fontSize(15)
-          .backgroundColor('#F2F3F5')
-          .borderRadius(8)
+          .fontSize($r('app.float.font_body'))
+          .fontColor($r('app.color.input_text'))
+          .placeholderColor($r('app.color.input_placeholder'))
+          .backgroundColor($r('app.color.input_bg'))
+          .borderRadius($r('app.float.radius_control'))
           .onChange((val: string) => {
             this.passwordInput = val;
             this.errorMessage = '';
@@ -47,8 +55,8 @@ export struct PasswordDialog {
 
         if (this.errorMessage.length > 0) {
           Text(this.errorMessage)
-            .fontSize(12)
-            .fontColor('#F53F3F')
+            .fontSize($r('app.float.font_caption'))
+            .fontColor($r('app.color.danger'))
             .width('100%')
         }
       }
@@ -57,14 +65,14 @@ export struct PasswordDialog {
       Row() {
         Checkbox({ name: 'remember', group: 'pwd' })
           .select(this.rememberPassword)
-          .selectedColor('#007DFF')
+          .selectedColor($r('app.color.brand'))
           .onChange((value: boolean) => {
             this.rememberPassword = value;
           })
 
-        Text('记住该设备访问口令')
-          .fontSize(13)
-          .fontColor('#4E5969')
+        Text($r('app.string.dialog_password_remember'))
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_body'))
           .margin({ left: 4 })
 
         Blank()
@@ -72,25 +80,25 @@ export struct PasswordDialog {
       .width('100%')
 
       Row({ space: 12 }) {
-        Button('取消')
+        Button($r('app.string.common_cancel'))
           .layoutWeight(1)
           .height(42)
-          .fontSize(14)
-          .backgroundColor('#F2F3F5')
-          .fontColor('#4E5969')
-          .borderRadius(8)
+          .fontSize($r('app.float.font_body'))
+          .backgroundColor($r('app.color.bg_subtle'))
+          .fontColor($r('app.color.text_body'))
+          .borderRadius($r('app.float.radius_control'))
           .onClick(() => {
             this.controller.close();
           })
 
-        Button('确认并进入桌面')
+        Button($r('app.string.devices_connect'))
           .layoutWeight(1.4)
           .height(42)
-          .fontSize(14)
+          .fontSize($r('app.float.font_body'))
           .fontWeight(FontWeight.Medium)
-          .backgroundColor('#007DFF')
-          .fontColor('#FFFFFF')
-          .borderRadius(8)
+          .backgroundColor($r('app.color.brand'))
+          .fontColor($r('app.color.on_brand'))
+          .borderRadius($r('app.float.radius_control'))
           .onClick(() => {
             if (!this.passwordInput.trim()) {
               this.errorMessage = '请输入口令后再进入';
@@ -107,7 +115,7 @@ export struct PasswordDialog {
     }
     .width('92%')
     .padding(20)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(14)
+    .backgroundColor($r('app.color.dialog_bg'))
+    .borderRadius($r('app.float.radius_card'))
   }
 }

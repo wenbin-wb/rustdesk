@@ -50,6 +50,8 @@ interface RustDeskNative {
   getLocalKbLayoutType(): string;
   mainGetOptionSync(key: string): string;
   mainGetPeerSync(id: string): string;
+  mainSetOption(key: string, value: string): void;
+  mainSetOptions(json: string): void;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -136,6 +138,22 @@ export function getLanPeers(): string {
  */
 export function getOption(key: string): string {
   return native.mainGetOptionSync(key);
+}
+
+/**
+ * Write several core options at once.
+ *
+ * Keys are the core's own option names (libs/base/src/config/keys.rs), not the UI's. An
+ * empty value clears the option, which is how the core returns to its built-in default --
+ * for the server options, the public servers.
+ */
+export function setOptions(options: Record<string, string>): void {
+  native.mainSetOptions(JSON.stringify(options));
+}
+
+/** Write one core option. */
+export function setOption(key: string, value: string): void {
+  native.mainSetOption(key, value);
 }
 
 /** Whether the given session is currently being recorded. */

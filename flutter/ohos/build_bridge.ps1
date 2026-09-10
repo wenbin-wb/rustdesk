@@ -39,6 +39,15 @@ $env:OHOS_NDK_HOME = $NdkLink
 
 if (-not $DeployOnly) {
   Write-Host "Building the core + bridge for aarch64-unknown-linux-ohos..." -ForegroundColor Cyan
+
+  # libsodium is attached with a raw `-C link-arg=<path>/libsodium.a` in
+  # .cargo/config.toml, and cargo does not fingerprint the CONTENT of a link-arg. Rebuilding
+  # libsodium therefore does not trigger a relink: the module silently keeps whatever was
+  # linked last time. That is how a fixed libsodium archive produced an unchanged .so.
+  # Touching a source file in the final crate forces the relink.
+  $stamp = Get-Item (Join-Path $native "src\lib.rs") -ErrorAction SilentlyContinue
+  if ($stamp) { $stamp.LastWriteTime = Get-Date }
+
   & pwsh -File (Join-Path $here "rust_ohos_build.ps1") `
       -Release -Package rustdesk-ohos-bridge -Features ""
   if ($LASTEXITCODE -ne 0) {
@@ -86,3 +95,41 @@ if (Test-Path $libcxx) {
 
 $mb = [math]::Round((Get-Item $dest).Length / 1MB, 2)
 Write-Host "Deployed $mb MB -> $dest" -ForegroundColor Green
+
+# ---------------------------------------------------------------------------
+# Fail loudly on a dependency the device cannot satisfy.
+#
+# This check exists because the same class of bug has now shipped twice and reached the
+# device both times. The module is loaded by name, so a missing NEEDED entry does not fail
+# the build or the install -- it fails at dlopen, where ArkTS only reports that the module is
+# undefined. libsodium was one case (wrong architecture, resolved symbols) and OpenSSL the
+# other (libssl.so, absent from the system).
+#
+# HarmonyOS provides these; anything else has to be bundled next to the module.
+$systemLibs = @(
+  'libc.so', 'libc++_shared.so', 'libm.so', 'libdl.so', 'libz.so',
+  'libace_napi.z.so', 'libace_compatible.z.so', 'libhilog.so', 'libhitrace.so',
+  'libnative_window.so', 'libnative_vsync.so', 'libnative_buffer.so',
+  'libnative_image.so', 'libpixelmap.so', 'libimage_source.so',
+  'libjnigraphics.so', 'libEGL.so', 'libGLESv3.so', 'libvulkan.so',
+  'libhidumper.so', 'libparameter.so', 'libbegetutil.so'
+)
+
+$readelf = Join-Path $NdkLink "llvm\bin\llvm-readelf.exe"
+if (Test-Path $readelf) {
+  $needed = & $readelf -d $dest 2>$null |
+    Select-String -Pattern '\(NEEDED\)' |
+    ForEach-Object { if ($_.Line -match '\[([^\]]+)\]') { $Matches[1] } }
+
+  $bundled = @{}
+  Get-ChildItem $destDir -Filter '*.so' | ForEach-Object { $bundled[$_.Name] = $true }
+
+  $missing = @($needed | Where-Object { $systemLibs -notcontains $_ -and -not $bundled.ContainsKey($_) })
+  if ($missing.Count -gt 0) {
+    Write-Host "UNRESOLVABLE DEPENDENCY -- the module will fail to load on device:" -ForegroundColor Red
+    $missing | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Write-Host "Bundle it into $destDir, or link it statically." -ForegroundColor Red
+    exit 1
+  }
+  Write-Host "Dependencies OK: $($needed.Count) NEEDED, all satisfied" -ForegroundColor Green
+}

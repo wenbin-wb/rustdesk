@@ -9,6 +9,7 @@
 import { SectionCard } from './SectionCard';
 import { UserProfile } from '../platform/ConfigStorage';
 import { getCoreVersion, getBridgeVersion, getCoreBuildDate, getApiServer } from '../platform/RustDeskBridge';
+import { HdsListItemCard } from '@kit.UIDesignKit';
 
 @Component
 export struct SettingsTab {
@@ -132,19 +133,20 @@ export struct SettingsTab {
     }
   }
 
+  /**
+   * A label/value row, as an HDS list item card.
+   *
+   * The design kit owns the row height, padding, type scale and press feedback, so these
+   * rows match every other list in the system rather than approximating one.
+   */
   @Builder
   private buildInfoRow(label: ResourceStr, value: ResourceStr) {
-    Row() {
-      Text(label)
-        .fontSize(15)
-        .fontColor($r('app.color.text_secondary'))
-      Blank()
-      Text(value)
-        .fontSize(15)
-        .fontColor($r('app.color.text_body'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
+    HdsListItemCard({
+      textItem: {
+        primaryText: { text: label },
+        secondaryText: { text: value }
+      }
+    })
+      .width('100%')
   }
 }

@@ -39,6 +39,11 @@ export const getLocalKbLayoutType: () => string;
 export const mainGetOptionSync: (key: string) => string;
 export const mainGetPeerSync: (id: string) => string;
 
+// Writing options. Without these the UI could read the core's configuration but never
+// change it, so a self-hosted server set in the app would never reach the core.
+export const mainSetOption: (key: string, value: string) => void;
+export const mainSetOptions: (json: string) => void;
+
 // Rendering
 export const getNextTextureKey: () => number;
 

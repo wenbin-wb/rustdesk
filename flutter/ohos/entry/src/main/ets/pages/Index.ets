@@ -10,6 +10,7 @@
  * See common/Breakpoint.ets for the thresholds and why they are width-based.
  */
 
+import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle } from '@kit.UIDesignKit';
 import { Breakpoint, observeBreakpoint, usesSideNavigation, pagePadding, maxContentWidth } from '../common/Breakpoint';
 import { RemoteTab, formatId } from '../components/RemoteTab';
 import { DevicesTab } from '../components/DevicesTab';
@@ -19,6 +20,7 @@ import { LoginDialog } from './LoginDialog';
 import { PasswordDialog } from './PasswordDialog';
 import { RemoteSessionPage } from './RemoteSessionPage';
 import { ConfigManager, ServerConfig, StoredPeer, UserProfile } from '../platform/ConfigStorage';
+import { getOption } from '../platform/RustDeskBridge';
 import { AuthService } from '../platform/AuthService';
 
 @Entry
@@ -38,6 +40,8 @@ struct Index {
 
   /** Detaches the breakpoint listeners; leaving them attached would keep this page alive. */
   private stopObservingBreakpoint: () => void = () => {};
+
+  private tabsController: HdsTabsController = new HdsTabsController();
 
   private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
     builder: ServerSettingsDialog({
@@ -74,8 +78,13 @@ struct Index {
   private async loadServerConfig(): Promise<void> {
     const config = ConfigManager.getInstance();
     const cfg: ServerConfig = await config.getServerConfig();
-    this.serverLabel = cfg.idServer.trim().length > 0
-      ? cfg.idServer.trim()
+    // Read the effective value back from the core rather than trusting the local copy, so
+    // the label shows the server the app will actually use. An empty result means the core
+    // is on its built-in default, i.e. the public servers.
+    const fromCore = getOption('custom-rendezvous-server').trim();
+    const effective = fromCore.length > 0 ? fromCore : cfg.idServer.trim();
+    this.serverLabel = effective.length > 0
+      ? effective
       : $r('app.string.home_public_relay');
   }
 
@@ -167,8 +176,10 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    // Let the page background run under the status bar and gesture area, then pad the
-    // content itself, which is what the HarmonyOS safe-area guidance asks for.
+    // The window is laid out full screen (see EntryAbility), so the page background runs
+    // under the status bar and the gesture area -- that is what removes the window-coloured
+    // strip at the top and bottom. The content itself is padded back out, below, since the
+    // bars would otherwise sit on top of it.
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
@@ -212,7 +223,16 @@ struct Index {
 
   @Builder
   private buildTabs() {
-    Tabs({ barPosition: usesSideNavigation(this.breakpoint) ? BarPosition.Start : BarPosition.End }) {
+    // HdsTabs from the UI Design Kit replaces the built-in Tabs. On the narrow breakpoint it
+    // renders the bar as a floating pill -- inset from the sides and lifted off the bottom,
+    // with the content visible behind and around it -- which is the HDS treatment for a
+    // bottom bar and is what makes the page read as full screen rather than as a page with a
+    // bar bolted underneath. On wide windows the same component is used vertically as a side
+    // rail, where the floating treatment does not apply.
+    HdsTabs({
+      barPosition: usesSideNavigation(this.breakpoint) ? BarPosition.Start : BarPosition.End,
+      controller: this.tabsController
+    }) {
       TabContent() {
         this.buildScrollableTab(0)
       }
@@ -229,11 +249,13 @@ struct Index {
       .tabBar(new BottomTabBarStyle($r('app.media.tab_settings'), $r('app.string.tab_settings')))
     }
     .vertical(usesSideNavigation(this.breakpoint))
-    .barWidth(usesSideNavigation(this.breakpoint) ? 96 : '100%')
-    .barHeight(usesSideNavigation(this.breakpoint) ? '100%' : 56)
     .scrollable(false)
     .layoutWeight(1)
     .backgroundColor(Color.Transparent)
+    .barFloatingStyle(usesSideNavigation(this.breakpoint) ? undefined : {
+      barSideMargin: 16,
+      barBottomMargin: 12
+    } as HdsTabsFloatingStyle)
   }
 
   /**

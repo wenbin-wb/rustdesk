@@ -254,3 +254,24 @@ pub fn session_get_reverse_mouse_wheel_sync(session_id: String) -> String {
         None => String::new(),
     }
 }
+
+// --- writing options ----------------------------------------------------------
+//
+// Without these the app could read the core's configuration but never change it, so
+// anything the UI collected -- a self-hosted server above all -- stayed in the ArkTS store
+// and never reached the component that actually opens connections.
+
+/// Set one core option, by the core's own key name.
+///
+/// Keys are the ones in libs/base/src/config/keys.rs, e.g. `custom-rendezvous-server`,
+/// `relay-server`, `api-server`, `key`.
+#[napi(js_name = "mainSetOption")]
+pub fn main_set_option(key: String, value: String) {
+    librustdesk::flutter_ffi::main_set_option(key, value)
+}
+
+/// Set several core options at once, from a JSON object of key to value.
+#[napi(js_name = "mainSetOptions")]
+pub fn main_set_options(json: String) {
+    librustdesk::flutter_ffi::main_set_options(json)
+}
