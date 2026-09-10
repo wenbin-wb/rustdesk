@@ -1,6 +1,0 @@
-{
-  "name": "@ohos/flutter_ohos",
-  "version": "1.0.0",
-  "description": "Flutter engine for OpenHarmony",
-  "main": "index.ets"
-}

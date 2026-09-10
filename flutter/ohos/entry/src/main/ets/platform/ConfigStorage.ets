@@ -23,6 +23,7 @@ export interface StoredPeer {
   alias: string;
   platform: string;
   lastConnectedTime: number;
+  rememberedPassword?: string;
 }
 
 export class ConfigManager {
@@ -170,6 +171,36 @@ export class ConfigManager {
     const peers = await this.getRecentPeers();
     const filtered = peers.filter(p => p.id !== id);
     await this.pref.put('recent_peers', JSON.stringify(filtered));
+    await this.pref.flush();
+  }
+
+  public async getPeerPassword(id: string): Promise<string> {
+    if (!this.pref) {
+      return '';
+    }
+    const cleanId = id.replace(/\s+/g, '');
+    return (await this.pref.get('peer_pwd_' + cleanId, '')) as string;
+  }
+
+  public async savePeerPassword(id: string, pwd: string): Promise<void> {
+    if (!this.pref) {
+      return;
+    }
+    const cleanId = id.replace(/\s+/g, '');
+    if (pwd) {
+      await this.pref.put('peer_pwd_' + cleanId, pwd);
+    } else {
+      await this.pref.delete('peer_pwd_' + cleanId);
+    }
+    await this.pref.flush();
+  }
+
+  public async removePeerPassword(id: string): Promise<void> {
+    if (!this.pref) {
+      return;
+    }
+    const cleanId = id.replace(/\s+/g, '');
+    await this.pref.delete('peer_pwd_' + cleanId);
     await this.pref.flush();
   }
 }

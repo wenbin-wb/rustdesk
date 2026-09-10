@@ -50,16 +50,21 @@ struct Index {
     autoCancel: true
   });
 
-  private passwordDialogController: CustomDialogController = new CustomDialogController({
-    builder: PasswordDialog({
-      targetId: this.connectedTargetId,
-      onVerify: (password: string, remember: boolean) => {
-        this.handlePasswordVerified(password, remember);
-      }
-    }),
-    alignment: DialogAlignment.Center,
-    autoCancel: true
-  });
+  private passwordDialogController: CustomDialogController | null = null;
+
+  openPasswordDialog(targetId: string): void {
+    this.passwordDialogController = new CustomDialogController({
+      builder: PasswordDialog({
+        targetId: targetId,
+        onVerify: (password: string, remember: boolean) => {
+          this.handlePasswordVerified(password, remember);
+        }
+      }),
+      alignment: DialogAlignment.Center,
+      autoCancel: true
+    });
+    this.passwordDialogController.open();
+  }
 
   aboutToAppear(): void {
     this.initRealData();
@@ -167,19 +172,38 @@ struct Index {
     this.recentDevices = await configManager.getRecentPeers();
 
     this.connectedTargetId = targetId;
+
+    // Check if password has already been remembered for this peer!
+    const savedPassword = await configManager.getPeerPassword(rawId);
+    if (savedPassword && savedPassword.trim().length > 0) {
+      this.connectionStatus = `检测到已记住的访问口令，正在免密直接接入 [${this.formatId(rawId)}]...`;
+      setTimeout(() => {
+        this.isConnecting = false;
+        this.handlePasswordVerified(savedPassword.trim(), true);
+      }, 500);
+      return;
+    }
+
     setTimeout(() => {
       this.connectionStatus = `已发送 NAT 穿透握手请求至 [${targetId}]，等待对端响应...`;
       setTimeout(() => {
         this.connectionStatus = `已建立安全通道，正在等待输入验证口令...`;
         this.isConnecting = false;
         // Pop up the real Password Verification dialog
-        this.passwordDialogController.open();
-      }, 1000);
-    }, 800);
+        this.openPasswordDialog(targetId);
+      }, 800);
+    }, 600);
   }
 
-  handlePasswordVerified(password: string, remember: boolean): void {
-    this.connectionStatus = `密码校验通过，已成功进入远程桌面 [${this.connectedTargetId}]`;
+  async handlePasswordVerified(password: string, remember: boolean): Promise<void> {
+    const configManager = ConfigManager.getInstance();
+    const rawId = this.connectedTargetId.replace(/\s+/g, '');
+    if (remember) {
+      await configManager.savePeerPassword(rawId, password);
+    } else {
+      await configManager.removePeerPassword(rawId);
+    }
+    this.connectionStatus = `口令校验通过，已成功进入远程桌面 [${this.connectedTargetId}]`;
     this.isInRemoteSession = true;
   }
 
@@ -253,8 +277,11 @@ struct Index {
 
             // Network Ready Tag
             Row({ space: 6 }) {
-              Circle({ width: 8, height: 8 })
-                .fill(this.isOnline ? '#00B42A' : '#F53F3F')
+              Row()
+                .width(8)
+                .height(8)
+                .borderRadius(4)
+                .backgroundColor(this.isOnline ? '#00B42A' : '#F53F3F')
               Text(this.isOnline ? '就绪' : '离线')
                 .fontSize(12)
                 .fontColor(this.isOnline ? '#00B42A' : '#F53F3F')
@@ -312,7 +339,11 @@ struct Index {
             .fontColor('#4E5969')
           Blank()
           Row({ space: 4 }) {
-            Circle({ width: 6, height: 6 }).fill('#00B42A')
+            Row()
+              .width(6)
+              .height(6)
+              .borderRadius(3)
+              .backgroundColor('#00B42A')
             Text('服务运行中')
               .fontSize(12)
               .fontColor('#00B42A')
@@ -486,6 +517,7 @@ struct Index {
               const configManager = ConfigManager.getInstance();
               for (const peer of this.recentDevices) {
                 await configManager.removeRecentPeer(peer.id);
+                await configManager.removePeerPassword(peer.id);
               }
               this.recentDevices = [];
             })
@@ -514,7 +546,11 @@ struct Index {
           Row() {
             Column({ space: 4 }) {
               Row({ space: 6 }) {
-                Circle({ width: 8, height: 8 }).fill('#00B42A')
+                Row()
+                  .width(8)
+                  .height(8)
+                  .borderRadius(4)
+                  .backgroundColor('#00B42A')
                 Text(device.alias ? device.alias : device.id)
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium)
@@ -549,6 +585,7 @@ struct Index {
                 .onClick(async () => {
                   const configManager = ConfigManager.getInstance();
                   await configManager.removeRecentPeer(device.id);
+                  await configManager.removePeerPassword(device.id);
                   this.recentDevices = await configManager.getRecentPeers();
                 })
             }
