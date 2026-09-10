@@ -233,3 +233,63 @@
 - 离线文档：`tools\arktsdoc`
 - NDK：`sdk\default\openharmony\native\{llvm,sysroot}`
 - 调试：`hdc.exe` / `ohpm` / `devecocli` / `tools\UxTestService` / `tools\emulator`
+
+---
+
+## 7. 参考项目调研（重要，已核实）
+
+**参考工程**：`https://atomgit.com/OpenHarmonyPCDeveloper/ohos_rustdesk`（OpenHarmonyPCDeveloper 组织，AGPL-3.0，已 clone 到 `C:\Users\Administrator\ref-ohos-rustdesk`）
+
+### 7.1 结论：架构与本方案一致（互相印证）
+
+其 README 原文：「**HarmonyOS 原生壳工程 + RustDesk Rust 内核 HAR** 的混合架构」——
+ArkTS/ArkUI 原生壳 + `rustdesk-ohrs.har`（Rust 内核以 HAR 形式嵌入）。**与本计划 §1 架构完全一致**（原生 UI + Rust 核心 + NAPI 桥接）。
+
+其目标 SDK：`targetSdkVersion 6.1.0(23)`（即 HarmonyOS 6.1.0 / API 23）。可见华为版本命名是 `HarmonyOS <X.Y.Z> (<API>)`，本机 `26.0.0 / API 26` 属另一条发布线，均可用。
+
+### 7.2 范围印证：纯控制端，且主动裁剪
+
+其 T0/T1/T2 分级中 **明确标注"未落地"**：摄像头、**被控端**、文件传输、语音通话，并说明理由是「平台安全策略的主动裁剪」。
+⇒ **印证本计划 §8 决策 2**（先做纯控制端、被控/屏幕共享后置），且被控受限是平台既有事实，不是我们能力问题。
+
+### 7.3 🔑 关键收获：`ohos-rs` 才是 P2 桥接层的正确工具
+
+**`https://github.com/ohos-rs/ohos-rs`**（243★）：*"A framework for building compiled OpenHarmony SDK in Rust via Node-API (Forked from napi-rs)"*。
+
+⇒ **P2 方案调整**：原计划「手写 C++ N-API 层包装 `flutter_ffi.rs` 的 C ABI」**改为直接用 `ohos-rs`**——在 Rust 里写 NAPI 导出（`#[napi]`），产出 HAR 供 ArkTS `import`。
+- 优势：无需手写 C++；Rust 侧类型/事件可直接暴露；是参考项目走通的成熟路径（其 HAR 名为 `rustdesk-ohrs`）。
+- 影响：P2 从「高不确定度的手工桥接」降级为「按框架约定导出函数」，大幅降低风险。
+
+### 7.4 ArkTS ↔ Rust 契约（从其公开 ArkTS 代码逆推，可直接借鉴）
+
+| 观察 | 内容 | 对本项目的意义 |
+|---|---|---|
+| **渲染** | `RustDeskSurfaceController extends XComponentController`，`onSurfaceCreated(surfaceId)` 把 `surfaceId` 交给 Rust | 印证 P2/P4「视频帧 → XComponent surface」，最小实现仅 17 行 |
+| **桥接风格** | **轮询式**：`EVENT_POLL_INTERVAL_MS = 50`；`ActionResponse { ok, action, message?, session?, events?, stats? }` | 比回调/threadsafe function 简单得多，建议照搬 |
+| **事件协议** | `NativeEvent` 字段即 RustDesk 原生事件名（`name/content/type/secure/direct/stream_type/id/hostname/platform/version/displays/resolutions/current_display/title/fps/delay/codec_format/x/y/hotx/hoty/colors/gpu_texture/file_num/finished_size/err/read_path/is_upload...`） | 说明其 Rust 侧直接复用了 RustDesk 既有 `push_event` 事件流；我们亦可复用 `src/flutter.rs` 的事件机制 |
+| **解码能力** | `DecoderCapability { codec, mime, mimeAvailable, recommendedIsHardware, hardwareAvailable, softwareAvailable, ... }` | **`mime` 字段 = HarmonyOS AVCodec 的 MIME（video/avc、video/hevc）** ⇒ **证实方案 A**：他们确实实现了鸿蒙原生 codec 后端 |
+| **GPU** | `NativeEvent.gpu_texture?: boolean` | 存在 GPU 纹理渲染路径（对应 `sessionRegisterGpuTexture`） |
+| **自研 API** | `RenderStatsSnapshot { fps, totalFrames, lastFrameAgeMs, hasRenderedFrame, decodeLatencyMs, avgDecodeLatencyMs }` | 上游 RustDesk 无此 API，系其自行扩展 ⇒ 统计面板需在 Rust 侧新增导出 |
+
+### 7.5 可借鉴的 ArkTS 模块清单（P3/P4 直接参考）
+
+`entry/src/main/ets/pages/rustdesk/`（约 40 个文件）：
+- 桥接：`RustDeskMainBridge.ets`(14.4KB)、`NativeSessionBridge.ets`(7.1KB)、`RustDeskTypes.ets`
+- 输入：`RustDeskInputController.ets`(33.8KB)、`RustDeskInputMapper.ets`(16.8KB)、`RustDeskTouchGestureState.ets`、`RustDeskPressedButtonState.ets`
+- 显示：`RustDeskViewportModel.ets`(7KB, 分辨率适配)、`RustDeskCursorModel.ets`(5.1KB)、`RustDeskSurfaceController.ets`、`SessionDisplayController.ets`
+- 系统能力：`RustDeskClipboardController.ets`、`TransferManager.ets`(17KB)、`services/DataTransferBackgroundService.ets`
+- UI：`components/`（`SettingsTab`(32.5KB)、`ConnectTab`、`PeerCard`、`SessionToolbar`(20.3KB)、`FloatingSegmentedControl`、`AmbientOrbitBackdrop` 等）
+- **资源已有 `resources/dark/element`（深色模式限定词）** ⇒ 印证 §6.3 设计令牌/深色模式要求
+- README 明确「采用 **HDS（HarmonyOS Design System）** 视觉规范与动效体系」⇒ 与 §6「全按鸿蒙官方规范」一致
+
+### 7.6 本参考项目**不能**解决的部分
+
+- **其 Rust 内核源码未公开**（`OpenHarmonyPCDeveloper/rustdesk_native_har` 等均 404/403），因此**看不到他们如何解决 nix / webrtc / scrap / glibc 兼容问题** ⇒ 本计划 §「当前唯一阻塞」及后续 Rust 侧工作仍需自行完成。
+- 但反过来说：**存在一个可运行的成品，证明这条路是通的**，且其暴露出的 API 形状可作为我们 Rust 侧接口设计的验收参照。
+- 该组织另有 `lycium_plusplus`（OpenHarmony 三方库移植构建框架），若将来需交叉编译 libvpx/aom 等 C 库（方案 B）可参考。
+
+### 7.7 对计划的净影响
+
+- **P2 重构**（改为 `ohos-rs`）：风险显著下降、工作量下降。
+- **P3/P4**：有可直接参考的成品实现（输入映射、视口适配、光标、剪贴板、UI 结构与深色模式）。
+- **P1 不变**：Rust 核心交叉编译仍需我们自行攻坚（参考项目未公开该部分）。
