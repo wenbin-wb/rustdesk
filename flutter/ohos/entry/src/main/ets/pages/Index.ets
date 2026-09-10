@@ -7,13 +7,11 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // 1. 底层：Flutter 原生渲染视窗
-      FlutterPage({ viewId: 'flutter_view' })
-        .width('100%')
-        .height('100%')
-
-      // 2. 预览占位与品牌启动卡片（在 IDE Previewer 静态预览及引擎初始化时展示）
-      if (!this.isFlutterReady) {
+      if (this.isFlutterReady) {
+        FlutterPage({ viewId: 'flutter_view' })
+          .width('100%')
+          .height('100%')
+      } else {
         Column({ space: 16 }) {
           Image($r('app.media.icon'))
             .width(80)
@@ -78,18 +76,26 @@ struct Index {
           .shadow({ radius: 8, color: '#10000000', offsetX: 0, offsetY: 2 })
           .margin({ top: 20 })
 
-          Text('提示：完整交互式远程桌面请在模拟器或真机中运行')
+          Button('进入远程桌面')
+            .fontSize(14)
+            .backgroundColor('#007DFF')
+            .width('85%')
+            .height(44)
+            .borderRadius(8)
+            .margin({ top: 16 })
+            .onClick(() => {
+              this.isFlutterReady = true;
+            })
+
+          Text('提示：在模拟器或真机中点击可进入 Flutter 渲染视窗')
             .fontSize(12)
             .fontColor('#8F959E')
-            .margin({ top: 12 })
+            .margin({ top: 8 })
         }
         .width('100%')
         .height('100%')
         .justifyContent(FlexAlign.Center)
         .backgroundColor('#F5F7FA')
-        .onClick(() => {
-          this.isFlutterReady = true;
-        })
       }
     }
     .width('100%')
