@@ -49,6 +49,9 @@ struct Index {
   @StorageProp('statusBarInsetPx') statusBarInsetPx: number = 0;
   @StorageProp('navIndicatorInsetPx') navIndicatorInsetPx: number = 0;
 
+  // customStyle: true on every dialog. Without it the framework wraps the content in its own
+  // opaque, rounded container, which shows around the edges of our narrower card -- the white
+  // rim. With it the builder's own background and radius are the only ones drawn.
   private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
     builder: ServerSettingsDialog({
       onSaved: () => {
@@ -56,7 +59,9 @@ struct Index {
       }
     }),
     alignment: DialogAlignment.Center,
-    autoCancel: true
+    autoCancel: true,
+    customStyle: true,
+    maskColor: $r('app.color.mask')
   });
 
   private loginDialogController: CustomDialogController = new CustomDialogController({
@@ -66,7 +71,35 @@ struct Index {
       }
     }),
     alignment: DialogAlignment.Center,
-    autoCancel: true
+    autoCancel: true,
+    customStyle: true,
+    maskColor: $r('app.color.mask')
+  });
+
+  // Target of the password dialog. The dialog needs it at open time, so it is state on the
+  // page rather than a constructor argument.
+  @State private passwordTargetId: string = '';
+
+  /**
+   * Held as a member, not as a local.
+   *
+   * This dialog used to be built into a local `const controller` inside the open method. The
+   * dialog opened, but its own `controller` member was never bound, so the first call to
+   * `this.controller.close()` -- on tapping connect -- threw
+   * "Cannot read property close of undefined" and took the app down. The framework binds the
+   * controller through this declaration, so the reference has to outlive the open call.
+   */
+  private passwordDialogController: CustomDialogController = new CustomDialogController({
+    builder: PasswordDialog({
+      targetId: this.passwordTargetId,
+      onVerify: (password: string, remember: boolean) => {
+        this.handlePasswordVerified(password, remember);
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    customStyle: true,
+    maskColor: $r('app.color.mask')
   });
 
   aboutToAppear(): void {
@@ -125,17 +158,8 @@ struct Index {
   }
 
   private openPasswordDialog(targetId: string): void {
-    const controller = new CustomDialogController({
-      builder: PasswordDialog({
-        targetId: targetId,
-        onVerify: (password: string, remember: boolean) => {
-          this.handlePasswordVerified(password, remember);
-        }
-      }),
-      alignment: DialogAlignment.Center,
-      autoCancel: true
-    });
-    controller.open();
+    this.passwordTargetId = targetId;
+    this.passwordDialogController.open();
   }
 
   private handlePasswordVerified(password: string, remember: boolean): void {

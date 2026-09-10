@@ -245,6 +245,7 @@ export class ConfigManager {
   }
 
   public async getPeerPassword(id: string): Promise<string> {
+    await this.ensureInit();
     if (!this.pref) {
       return '';
     }
@@ -253,6 +254,7 @@ export class ConfigManager {
   }
 
   public async savePeerPassword(id: string, pwd: string): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -266,6 +268,7 @@ export class ConfigManager {
   }
 
   public async removePeerPassword(id: string): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
