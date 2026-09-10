@@ -121,7 +121,14 @@
 - [x] 搭建 `flutter/ohos/native/` 骨架并**验证工具链打通** ✅
   - `cargo build --release --target aarch64-unknown-linux-ohos` → Finished
   - 产物 `librustdesk_ohos.so`（0.59 MB）验证为 AArch64 ELF，且导出 **`napi_register_module_v1`**（HarmonyOS NAPI 加载器入口）
-- [ ] 接入 RustDesk 核心：`rustdesk` 作为 path 依赖，把 `src/flutter_ffi.rs` 的导出逐个包成 `#[napi]` 函数
+- [x] **接入 RustDesk 核心** ✅ `rustdesk`（lib target 名 `librustdesk`）作为 path 依赖，**首批 15 个导出**已包成 `#[napi]`
+  - 产物 `librustdesk_ohos.so` **1.89 MB**，AArch64 ELF，**16/16 导出符号实测全部在位**
+  - 已接入：`bridgeVersion`、`mainGetVersion`、`mainGetBuildDate`、`mainGetMyId`、`mainGetUuid`、`mainIsUsingPublicServer`、`mainGetProxyStatus`、`mainGetAppName`、`mainGetLicense`、`mainGetConnectStatus`、`mainGetApiServer`、`mainGetLastRemoteId`、`mainGetLanPeers`、`mainGetNewStoredPeers`、`mainGetOptions`
+  - ⚠️ **仅限"朴素类型"导出**（参数/返回为 String/bool 等）。其余三类需专项决策：
+    - 返回 `SyncReturn<T>` → 需**拆包**（它是 flutter_rust_bridge 的"同步返回"标记，NAPI 无对应物）
+    - 收 `StreamSink` → 是事件通道，ohos 改用自带投递路径（见 `push_ui_event` 预留分支）
+    - 收 `SessionID`(UUID 串) → 需定 ArkTS 侧会话标识方式
+- [ ] 第二批导出：`SyncReturn<T>` 族（`main_get_option_sync`、`main_get_options_sync`、`main_get_app_name_sync`、`main_uri_prefix_sync`、`main_get_peer_sync`、`session_*` 等）
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支）
 - [ ] 视频帧 → XComponent surface/纹理
 - [ ] 打包为 HAR 并接入 HAP：`librustdesk_ohos.so` → `entry/src/main/libs/arm64-v8a/`
