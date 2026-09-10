@@ -17,9 +17,21 @@ import { HdsListItemCard } from '@kit.UIDesignKit';
 export struct DevicesTab {
   @State private devices: StoredPeer[] = [];
 
+  /**
+   * Incremented by the page whenever the stored peer list changes.
+   *
+   * This tab loads once, in aboutToAppear, and a TabContent stays alive after it has been
+   * shown, so without this the list would keep showing its first-build contents.
+   */
+  @Prop @Watch('onPeersChanged') peersRevision: number = 0;
+
   onConnect: (targetId: string) => void = () => {};
 
   aboutToAppear(): void {
+    this.reload();
+  }
+
+  onPeersChanged(): void {
     this.reload();
   }
 

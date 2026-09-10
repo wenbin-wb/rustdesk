@@ -1,5 +1,9 @@
 import { AuthService } from '../platform/AuthService';
 import { UserProfile } from '../platform/ConfigStorage';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskLogin';
 
 @CustomDialog
 export struct LoginDialog {
@@ -10,6 +14,14 @@ export struct LoginDialog {
   @State errorMsg: string = '';
   onLoginSuccess?: (profile: UserProfile) => void;
 
+  /**
+   * Sign in.
+   *
+   * The loading flag is cleared in a finally block, so a rejection anywhere in the chain --
+   * including the profile write that follows a successful login -- cannot leave the button
+   * permanently disabled with no explanation. That was the previous behaviour: isLoading
+   * stayed true and the dialog showed nothing.
+   */
   async doLogin(): Promise<void> {
     if (!this.account.trim()) {
       this.errorMsg = '请输入账号或邮箱';
@@ -23,16 +35,21 @@ export struct LoginDialog {
     this.isLoading = true;
     this.errorMsg = '';
 
-    const res = await AuthService.login(this.account, this.password);
-    this.isLoading = false;
-
-    if (res.success && res.user) {
-      if (this.onLoginSuccess) {
-        this.onLoginSuccess(res.user);
+    try {
+      const res = await AuthService.login(this.account, this.password);
+      if (res.success && res.user) {
+        if (this.onLoginSuccess) {
+          this.onLoginSuccess(res.user);
+        }
+        this.controller.close();
+      } else {
+        this.errorMsg = res.message;
       }
-      this.controller.close();
-    } else {
-      this.errorMsg = res.message;
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'login failed: %{public}s', JSON.stringify(e));
+      this.errorMsg = '登录失败，请稍后重试';
+    } finally {
+      this.isLoading = false;
     }
   }
 

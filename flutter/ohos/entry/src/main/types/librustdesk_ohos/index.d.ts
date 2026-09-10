@@ -52,6 +52,8 @@ export const mainDeviceName: (name: string) => void;
 export const mainInit: (appDir: string, customClientConfig: string) => void;
 export const mainGetAsyncStatus: () => string;
 export const mainGetError: () => string;
+export const mainGetTemporaryPassword: () => string;
+export const mainUpdateTemporaryPassword: () => void;
 
 // Rendering
 export const getNextTextureKey: () => number;

@@ -8,8 +8,12 @@
 
 import { SectionCard } from './SectionCard';
 import { HdsListItemCard } from '@kit.UIDesignKit';
-import { getMyId, getCoreVersion } from '../platform/RustDeskBridge';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { getMyId, getCoreVersion, getTemporaryPassword } from '../platform/RustDeskBridge';
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskRemote';
 
 /** Group digits in threes, the way the ID is written in the desktop clients. */
 export function formatId(input: string): string {
@@ -39,24 +43,47 @@ export struct RemoteTab {
   @State private subTab: number = 0;
   @State private recentDevices: StoredPeer[] = [];
 
+  /**
+   * Incremented by the page whenever the stored peer list changes.
+   *
+   * This tab loads once, in aboutToAppear, and a TabContent stays alive after it has been
+   * shown, so without this the recent list would keep showing its first-build contents.
+   */
+  @Prop @Watch('onPeersChanged') peersRevision: number = 0;
+
   aboutToAppear(): void {
     this.loadDeviceIdentity();
     this.loadPeers();
   }
 
+  onPeersChanged(): void {
+    this.loadPeers();
+  }
+
   /**
-   * Read this device's ID from the core.
+   * Read this device's identity from the core.
    *
    * The core reports an empty string before it has been initialised, which is a normal
    * "not ready yet" state rather than an error, so the UI shows a placeholder instead of
    * inventing a value.
+   *
+   * Guarded because this runs from aboutToAppear. A throwing bridge call here is what took the
+   * app down when the native module failed to load -- the failure surfaced as a crash at this
+   * exact line rather than as a missing id, so a blank id is the better outcome.
+   *
+   * The one-time password also comes from the core, which is what generates and rotates it.
+   * It used to be read from a preferences key that nothing ever wrote, so the field could only
+   * ever show its placeholder.
    */
   private loadDeviceIdentity(): void {
-    this.myId = getMyId();
-    const config = ConfigManager.getInstance();
-    config.getOneTimePassword().then((pwd: string) => {
-      this.oneTimePassword = pwd;
-    });
+    try {
+      this.myId = getMyId();
+      this.oneTimePassword = getTemporaryPassword();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'device identity unavailable: %{public}s', JSON.stringify(e));
+      this.myId = '';
+      this.oneTimePassword = '';
+    }
   }
 
   private loadPeers(): void {
@@ -97,6 +124,11 @@ export struct RemoteTab {
       trailing: this.serverLabel
     }) {
       Column({ space: 12 }) {
+        // The raw digits are kept in state and formatting is applied only for display of the
+        // local id and at submission. Reformatting on every keystroke -- which is what putting
+        // formatId() in onChange did -- rewrites the field the user is typing into, moves the
+        // caret to the end, and can disagree with the numeric input filter about the contents.
+        // A dropped or transposed digit here means connecting to a different machine.
         TextInput({ placeholder: $r('app.string.home_id_placeholder'), text: this.remoteIdInput })
           .type(InputType.Number)
           .height(48)
@@ -105,7 +137,7 @@ export struct RemoteTab {
           .backgroundColor($r('app.color.bg_subtle'))
           .placeholderColor($r('app.color.text_hint'))
           .onChange((value: string) => {
-            this.remoteIdInput = formatId(value);
+            this.remoteIdInput = value.replace(/\s+/g, '');
           })
           .onSubmit(() => {
             this.submit();

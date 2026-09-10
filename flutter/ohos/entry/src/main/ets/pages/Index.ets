@@ -39,6 +39,16 @@ struct Index {
     avatar: '',
     isLoggedIn: false
   };
+  /**
+   * Bumped whenever the stored peer list changes.
+   *
+   * The tabs load their lists in aboutToAppear, which runs once: Tabs keeps a TabContent alive
+   * after it has been shown, so returning to a tab does not rebuild it. Connecting to a new
+   * peer therefore left both lists showing their contents as of first build. The tabs watch
+   * this value and reload when it changes.
+   */
+  @State private peersRevision: number = 0;
+
   @State private isInRemoteSession: boolean = false;
   @State private connectedTargetId: string = '';
 
@@ -112,7 +122,7 @@ struct Index {
    */
   private passwordDialogController: CustomDialogController = new CustomDialogController({
     builder: PasswordDialog({
-      targetId: this.passwordTargetId,
+      targetId: $passwordTargetId,
       onVerify: (password: string, remember: boolean) => {
         this.handlePasswordVerified(password, remember);
       }
@@ -187,6 +197,9 @@ struct Index {
       lastConnectedTime: Date.now()
     };
     config.addRecentPeer(peer).then(() => {
+      // Both peer lists load once when their tab is first built and a TabContent is kept alive
+      // after that, so tell them to reload or the peer just connected to will not appear.
+      this.peersRevision++;
       return config.getPeerPassword(rawId);
     }).then((saved: string) => {
       if (saved.length > 0) {
@@ -369,6 +382,7 @@ struct Index {
         if (index === 0) {
           RemoteTab({
             serverLabel: this.serverLabel,
+            peersRevision: this.peersRevision,
             onConnect: (targetId: string) => {
               this.beginConnect(targetId);
             },
@@ -379,6 +393,7 @@ struct Index {
           })
         } else if (index === 1) {
           DevicesTab({
+            peersRevision: this.peersRevision,
             onConnect: (targetId: string) => {
               this.beginConnect(targetId);
             }

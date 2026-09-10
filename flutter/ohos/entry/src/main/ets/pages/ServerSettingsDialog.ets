@@ -1,4 +1,16 @@
 import { ConfigManager, ServerConfig } from '../platform/ConfigStorage';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskServerCfg';
+
+/** Which server field an input edits. */
+enum ServerField {
+  Id,
+  Relay,
+  Api,
+  Key
+}
 
 /**
  * Self-hosted / relay server settings.
@@ -22,7 +34,15 @@ export struct ServerSettingsDialog {
   @State statusMsg: string = '';
   onSaved?: () => void;
 
+  /**
+   * Save and close.
+   *
+   * The failure path reports rather than closing silently. Closing regardless would tell the
+   * user the settings were applied when they were not; staying open with no message, which is
+   * what this used to do, looks like the button did nothing at all.
+   */
   private async saveConfig(): Promise<void> {
+    this.statusMsg = '';
     const cfg: ServerConfig = {
       idServer: this.serverCfg.idServer.trim(),
       relayServer: this.serverCfg.relayServer.trim(),
@@ -30,33 +50,67 @@ export struct ServerSettingsDialog {
       key: this.serverCfg.key.trim(),
       webClientUrl: (this.serverCfg.webClientUrl || '').trim()
     };
-    await ConfigManager.getInstance().saveServerConfig(cfg);
-    this.serverCfg = cfg;
-    if (this.onSaved) {
-      this.onSaved();
+    try {
+      await ConfigManager.getInstance().saveServerConfig(cfg);
+      this.serverCfg = cfg;
+      if (this.onSaved) {
+        this.onSaved();
+      }
+      this.controller.close();
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'could not save the server configuration: %{public}s', JSON.stringify(e));
+      this.statusMsg = '保存失败，请重试';
     }
-    this.controller.close();
   }
 
+  /**
+   * One labelled input.
+   *
+   * The field name is passed, not the value, and the value is read from `serverCfg` inside the
+   * builder. ArkUI does not refresh a @Builder whose parameters are passed by value, so a
+   * builder taking the text would keep showing whatever it was first given -- the fields would
+   * ignore both the page's load and Reset, leaving the dialog showing one configuration while
+   * saving another. Reading the @Link state here keeps the two in step. The key is a literal
+   * that never changes, so passing it by value is safe.
+   */
   @Builder
-  private field(label: ResourceStr, placeholder: ResourceStr, value: string,
-                onText: (v: string) => void) {
+  private field(field: ServerField, label: ResourceStr, placeholder: ResourceStr) {
     Column({ space: 4 }) {
       Text(label)
         .fontSize($r('app.float.font_caption'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_secondary'))
         .width('100%')
-      TextInput({ text: value, placeholder: placeholder })
+      TextInput({ text: this.valueOfField(field), placeholder: placeholder })
         .height(42)
         .fontSize($r('app.float.font_body'))
         .fontColor($r('app.color.input_text'))
         .placeholderColor($r('app.color.input_placeholder'))
         .backgroundColor($r('app.color.input_bg'))
         .borderRadius($r('app.float.radius_control'))
-        .onChange(onText)
+        .onChange((v: string) => {
+          this.setField(field, v);
+        })
     }
     .width('100%')
+  }
+
+  private valueOfField(field: ServerField): string {
+    switch (field) {
+      case ServerField.Id: return this.serverCfg.idServer;
+      case ServerField.Relay: return this.serverCfg.relayServer;
+      case ServerField.Api: return this.serverCfg.apiServer;
+      default: return this.serverCfg.key;
+    }
+  }
+
+  private setField(field: ServerField, value: string): void {
+    switch (field) {
+      case ServerField.Id: this.serverCfg.idServer = value; break;
+      case ServerField.Relay: this.serverCfg.relayServer = value; break;
+      case ServerField.Api: this.serverCfg.apiServer = value; break;
+      default: this.serverCfg.key = value; break;
+    }
   }
 
   build() {
@@ -83,14 +137,10 @@ export struct ServerSettingsDialog {
         .width('100%')
 
       Column({ space: 10 }) {
-        this.field($r('app.string.dialog_server_id'), 'custom.rustdesk.com', this.serverCfg.idServer,
-          (v: string) => { this.serverCfg.idServer = v; })
-        this.field($r('app.string.dialog_server_relay'), 'relay.example.com', this.serverCfg.relayServer,
-          (v: string) => { this.serverCfg.relayServer = v; })
-        this.field($r('app.string.dialog_server_api'), 'http://custom.rustdesk.com:21114', this.serverCfg.apiServer,
-          (v: string) => { this.serverCfg.apiServer = v; })
-        this.field($r('app.string.dialog_server_key'), 'Base64', this.serverCfg.key,
-          (v: string) => { this.serverCfg.key = v; })
+        this.field(ServerField.Id, $r('app.string.dialog_server_id'), 'custom.rustdesk.com')
+        this.field(ServerField.Relay, $r('app.string.dialog_server_relay'), 'relay.example.com')
+        this.field(ServerField.Api, $r('app.string.dialog_server_api'), 'http://custom.rustdesk.com:21114')
+        this.field(ServerField.Key, $r('app.string.dialog_server_key'), 'Base64')
       }
       .width('100%')
 

@@ -324,3 +324,19 @@ pub fn main_get_async_status() -> String {
 pub fn main_get_error() -> String {
     librustdesk::flutter_ffi::main_get_error()
 }
+
+/// This device's one-time password: the short code a peer may use instead of the permanent one.
+///
+/// Read from the core rather than kept by the app, because the core is what generates and
+/// rotates it. The UI previously read a preferences key that nothing ever wrote, so the field
+/// could only ever show a placeholder.
+#[napi(js_name = "mainGetTemporaryPassword")]
+pub fn main_get_temporary_password() -> String {
+    librustdesk::flutter_ffi::main_get_temporary_password()
+}
+
+/// Rotate the one-time password, invalidating the previous one.
+#[napi(js_name = "mainUpdateTemporaryPassword")]
+pub fn main_update_temporary_password() {
+    librustdesk::flutter_ffi::main_update_temporary_password()
+}

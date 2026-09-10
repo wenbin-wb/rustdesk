@@ -1,6 +1,10 @@
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { getOption, setOptions } from './RustDeskBridge';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { getOption, setOption } from './RustDeskBridge';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskConfig';
 
 export interface ServerConfig {
   idServer: string;
@@ -47,24 +51,23 @@ export class ConfigManager {
 
   public async init(context: common.Context): Promise<void> {
     this.context = context;
-    if (this.isInitialized && this.pref) {
-      return;
-    }
-    try {
-      this.pref = await preferences.getPreferences(context, 'rustdesk_settings');
-      this.isInitialized = true;
-    } catch {
-      // Graceful fallback
-    }
+    // Route through the shared attempt so the ability and the first page read do not open the
+    // same preferences file twice.
+    return this.ensureInit();
   }
 
   /**
-   * Open preferences if they are not open yet, once.
+   * Open preferences if they are not open yet.
    *
    * init() has to be called with a Context, and only the ability has one, so a reader that
    * runs before the ability got round to it would otherwise silently see nothing. Every
-   * accessor awaits this first. The promise is cached so concurrent callers share one open
-   * rather than racing.
+   * accessor awaits this first. Concurrent callers share one attempt rather than racing.
+   *
+   * A failed attempt is NOT cached. Caching it would mean that if getPreferences rejects once
+   * -- and it can, on an early call -- the cached promise resolves, every later caller returns
+   * immediately, and the process is left with no store: every read empty and every write
+   * dropped, silently, for as long as it runs. Clearing the promise makes the next accessor
+   * retry, so a transient failure stays transient.
    */
   private ensureInit(): Promise<void> {
     if (this.isInitialized && this.pref) {
@@ -74,9 +77,28 @@ export class ConfigManager {
       return Promise.resolve();
     }
     if (!this.initPromise) {
-      this.initPromise = this.init(this.context);
+      this.initPromise = this.openStore(this.context).then((ok: boolean) => {
+        if (!ok) {
+          // Allow a later caller to try again.
+          this.initPromise = null;
+        }
+      });
     }
     return this.initPromise;
+  }
+
+  /** One attempt at opening the store. Reports failure instead of swallowing it. */
+  private async openStore(context: common.Context): Promise<boolean> {
+    try {
+      this.pref = await preferences.getPreferences(context, 'rustdesk_settings');
+      this.isInitialized = true;
+      return true;
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'could not open the settings store: %{public}s', JSON.stringify(e));
+      this.pref = null;
+      this.isInitialized = false;
+      return false;
+    }
   }
 
   public async getServerConfig(): Promise<ServerConfig> {
@@ -123,14 +145,16 @@ export class ConfigManager {
     // Push to the core first, and unconditionally. The core owns the settings that matter,
     // so a failure to open preferences must not also discard the user's server choice -- an
     // early return on a null pref is exactly what made saving appear to do nothing.
-    // Keys are the core's own option names (libs/base/src/config/keys.rs); an empty value
-    // clears the option, which is how the core returns to the public servers.
-    setOptions({
-      'custom-rendezvous-server': id,
-      'relay-server': relay,
-      'api-server': api,
-      'key': key
-    });
+    //
+    // Set one key at a time rather than through the bulk call. mainSetOptions assigns the
+    // whole option map, so it would drop any option set elsewhere; it also skips the per-key
+    // side effects that mainSetOption runs for exactly these keys. Keys are the core's own
+    // names (libs/base/src/config/keys.rs); an empty value clears the option, which is how the
+    // core returns to the public servers.
+    setOption('custom-rendezvous-server', id);
+    setOption('relay-server', relay);
+    setOption('api-server', api);
+    setOption('key', key);
 
     await this.ensureInit();
     if (!this.pref) {
@@ -145,6 +169,7 @@ export class ConfigManager {
   }
 
   public async getMyId(): Promise<string> {
+    await this.ensureInit();
     if (!this.pref) {
       return '';
     }
@@ -152,6 +177,7 @@ export class ConfigManager {
   }
 
   public async setMyId(id: string): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -160,6 +186,7 @@ export class ConfigManager {
   }
 
   public async getOneTimePassword(): Promise<string> {
+    await this.ensureInit();
     if (!this.pref) {
       return '';
     }
@@ -167,6 +194,7 @@ export class ConfigManager {
   }
 
   public async setOneTimePassword(pwd: string): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -175,6 +203,7 @@ export class ConfigManager {
   }
 
   public async getUserProfile(): Promise<UserProfile> {
+    await this.ensureInit();
     if (!this.pref) {
       return { username: '', email: '', token: '', avatar: '', isLoggedIn: false };
     }
@@ -187,6 +216,7 @@ export class ConfigManager {
   }
 
   public async saveUserProfile(profile: UserProfile): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -198,6 +228,7 @@ export class ConfigManager {
   }
 
   public async clearUserProfile(): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -209,6 +240,7 @@ export class ConfigManager {
   }
 
   public async getRecentPeers(): Promise<StoredPeer[]> {
+    await this.ensureInit();
     if (!this.pref) {
       return [];
     }
@@ -221,6 +253,7 @@ export class ConfigManager {
   }
 
   public async addRecentPeer(peer: StoredPeer): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }
@@ -235,6 +268,7 @@ export class ConfigManager {
   }
 
   public async removeRecentPeer(id: string): Promise<void> {
+    await this.ensureInit();
     if (!this.pref) {
       return;
     }

@@ -1,11 +1,30 @@
 @CustomDialog
 export struct PasswordDialog {
   controller: CustomDialogController;
-  targetId: string = '';
+
+  /**
+   * The peer being authorised, linked to the page's state.
+   *
+   * This has to be @Link, not a plain member. The dialog instance is created once per
+   * controller and reused for every open, and a plain member is only read when the instance is
+   * built -- so the dialog would show an empty target on the first open and the *previous*
+   * peer on later ones, while the flow itself authorised whichever peer was actually chosen.
+   * The user would then be typing peer A's password for peer B.
+   *
+   * @Watch clears the typed password and any error when the target changes, so a value entered
+   * for one peer cannot be carried over and remembered against another.
+   */
+  @Link @Watch('onTargetChanged') targetId: string;
   @State passwordInput: string = '';
   @State rememberPassword: boolean = true;
   @State errorMessage: string = '';
   onVerify?: (password: string, remember: boolean) => void;
+
+  onTargetChanged(): void {
+    this.passwordInput = '';
+    this.errorMessage = '';
+    this.rememberPassword = true;
+  }
 
   build() {
     Column({ space: 14 }) {

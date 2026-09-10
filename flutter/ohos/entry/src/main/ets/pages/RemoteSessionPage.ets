@@ -1,4 +1,37 @@
 import { getConnectStatus, getLastRemoteId, peerGetSessionsCount } from '../platform/RustDeskBridge';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskSession';
+
+/**
+ * Describe the value the core reports as its connection status.
+ *
+ * On this platform main_get_connect_status does not return a connection state machine. Its
+ * ohos/android/ios arm returns hbb_common::config::get_online_state() -- the highest known
+ * online state of the peers that have been queried -- with anything above zero collapsed to 1,
+ * so the value is 0 (not established) or 1 (at least one queried peer is online). The wording
+ * below says that, rather than inventing connect/probe/handshake phases the core does not
+ * report here.
+ */
+function describeStatus(raw: string): string {
+  if (!raw || raw.length === 0) {
+    return '';
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    const num = parsed['status_num'];
+    if (typeof num === 'number') {
+      if (num <= 0) {
+        return '未确认对端在线';
+      }
+      return '对端在线';
+    }
+  } catch (e) {
+    // Not the shape we expect; show what the core actually said rather than hiding it.
+  }
+  return raw;
+}
 
 /**
  * Remote session view.
@@ -23,7 +56,7 @@ export struct RemoteSessionPage {
   @State private coreStatus: string = '';
   @State private lastRemoteId: string = '';
   @State private sessionCount: number = 0;
-  @State private polling: boolean = false;
+  @State private lastError: string = '';
 
   /** Polls the core while this page is up; cleared on disappear so it cannot outlive it. */
   private timerId: number = -1;
@@ -42,15 +75,26 @@ export struct RemoteSessionPage {
     }
   }
 
+  /**
+   * Read the core's state.
+   *
+   * Guarded as a whole: a throw from the bridge aborts the whole interval tick, so the page
+   * would silently freeze on stale values rather than reporting a problem. That is also the
+   * shape of the crash this app had when the native module failed to load, and a status page
+   * is not worth dying for.
+   *
+   * The core reports the connection status as JSON ({"status_num":N}), so it is parsed for
+   * display rather than shown raw.
+   */
   private refresh(): void {
-    this.coreStatus = getConnectStatus();
-    this.lastRemoteId = getLastRemoteId();
-    // Peer state is a core query, so this is real information even though the session itself
-    // is not started.
     try {
+      this.coreStatus = describeStatus(getConnectStatus());
+      this.lastRemoteId = getLastRemoteId();
       this.sessionCount = peerGetSessionsCount(this.rawTarget(), 0);
+      this.lastError = '';
     } catch (e) {
-      this.sessionCount = 0;
+      this.lastError = '核心状态读取失败';
+      hilog.warn(DOMAIN, TAG, 'core state unavailable: %{public}s', JSON.stringify(e));
     }
   }
 
@@ -106,6 +150,18 @@ export struct RemoteSessionPage {
   @Builder
   private buildStatusCard() {
     Column({ space: 10 }) {
+      if (this.lastError.length > 0) {
+        Row() {
+          Text(this.lastError)
+            .fontSize($r('app.float.font_caption'))
+            .fontColor($r('app.color.danger'))
+        }
+        .width('100%')
+        .padding(8)
+        .backgroundColor($r('app.color.status_offline_bg'))
+        .borderRadius($r('app.float.radius_control'))
+      }
+
       Row() {
         Text($r('app.string.session_core_status'))
           .fontSize($r('app.float.font_caption'))

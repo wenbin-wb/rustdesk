@@ -16,6 +16,10 @@
 import { UserProfile } from '../platform/ConfigStorage';
 import { getCoreVersion, getBridgeVersion, getCoreBuildDate, getApiServer } from '../platform/RustDeskBridge';
 import { HdsListItemCard } from '@kit.UIDesignKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN = 0x0000;
+const TAG = 'RustDeskSettings';
 
 @Component
 export struct SettingsTab {
@@ -33,10 +37,16 @@ export struct SettingsTab {
   @State private apiServer: string = '';
 
   aboutToAppear(): void {
-    this.coreVersion = getCoreVersion();
-    this.bridgeVersion = getBridgeVersion();
-    this.buildDate = getCoreBuildDate();
-    this.apiServer = getApiServer();
+    // Guarded: these run before the first frame, and a throwing bridge call there takes the
+    // process down instead of leaving a blank row.
+    try {
+      this.coreVersion = getCoreVersion();
+      this.bridgeVersion = getBridgeVersion();
+      this.buildDate = getCoreBuildDate();
+      this.apiServer = getApiServer();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'core versions unavailable: %{public}s', JSON.stringify(e));
+    }
   }
 
   build() {

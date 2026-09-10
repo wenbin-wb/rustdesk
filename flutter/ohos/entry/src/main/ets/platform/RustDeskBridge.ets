@@ -58,6 +58,8 @@ interface RustDeskNative {
   mainInit(appDir: string, customClientConfig: string): void;
   mainGetAsyncStatus(): string;
   mainGetError(): string;
+  mainGetTemporaryPassword(): string;
+  mainUpdateTemporaryPassword(): void;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -191,6 +193,16 @@ export function getAsyncStatus(): string {
 /** The last error the core recorded, empty when there is none. */
 export function getLastError(): string {
   return native.mainGetError();
+}
+
+/** This device's one-time password. Empty until the core has generated one. */
+export function getTemporaryPassword(): string {
+  return native.mainGetTemporaryPassword();
+}
+
+/** Invalidate the current one-time password and generate a new one. */
+export function updateTemporaryPassword(): void {
+  native.mainUpdateTemporaryPassword();
 }
 
 /** Whether the given session is currently being recorded. */
