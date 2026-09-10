@@ -1,4 +1,5 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult, MethodCallHandler } from '@ohos/flutter_ohos';
+import { window } from '@kit.ArkUI';
 import { ClipboardBridge } from '../platform/ClipboardBridge';
 import { FilePickerBridge } from '../platform/FilePickerBridge';
 import { ScreenCaptureBridge } from '../platform/ScreenCaptureBridge';
@@ -85,5 +86,10 @@ export default class EntryAbility extends FlutterAbility {
       this.screenCaptureBridge
     );
     mChannel.setMethodCallHandler(handler);
+  }
+
+  onWindowStageCreate(windowStage: window.WindowStage): void {
+    super.onWindowStageCreate(windowStage);
+    windowStage.loadContent('pages/Index');
   }
 }
