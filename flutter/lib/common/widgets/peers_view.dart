@@ -328,7 +328,7 @@ class _PeersViewState extends State<_PeersView>
           final skipIfIsWeb =
               isWeb && !(stateGlobal.isWebVisible && stateGlobal.isInMainPage);
           final skipIfMobile =
-              (isAndroid || isIOS) && !stateGlobal.isInMainPage;
+              (isAndroid || isIOS || isOHOS) && !stateGlobal.isInMainPage;
           final skipIfNotActive = skipIfIsWeb || skipIfMobile || !_isActive;
           if (!skipIfNotActive && (_queryCount < _maxQueryCount || !p)) {
             if (now.difference(_lastQueryTime) >= _queryInterval) {

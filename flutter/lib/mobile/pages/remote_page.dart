@@ -192,7 +192,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   bool _shouldGateKeyboardForWayland() {
-    if (!(isAndroid || isIOS)) return false;
+    if (!(isAndroid || isIOS || isOHOS)) return false;
     final pi = gFFI.ffiModel.pi;
     return pi.platform == kPeerPlatformLinux && pi.isWayland;
   }

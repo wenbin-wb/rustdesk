@@ -583,7 +583,7 @@ class MyTheme {
 
   static Future<void> changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
-    if (desktopType == DesktopType.main || isAndroid || isIOS || isWeb) {
+    if (desktopType == DesktopType.main || isAndroid || isIOS || isOHOS || isWeb) {
       if (mode == ThemeMode.system) {
         await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: defaultOptionTheme);
@@ -701,7 +701,7 @@ String formatDurationToTime(Duration duration) {
 }
 
 closeConnection({String? id}) {
-  if (isAndroid || isIOS) {
+  if (isAndroid || isIOS || isOHOS) {
     () async {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
@@ -2410,7 +2410,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (uri.authority == "config") {
-    if (isAndroid || isIOS) {
+    if (isAndroid || isIOS || isOHOS) {
       final allowDeepLinkServerSettings =
           bind.mainGetBuildinOption(key: kOptionAllowDeepLinkServerSettings) ==
               'Y';
@@ -2432,7 +2432,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
     return null;
   } else if (uri.authority == "password") {
-    if (isAndroid || isIOS) {
+    if (isAndroid || isIOS || isOHOS) {
       final allowDeepLinkPassword =
           bind.mainGetBuildinOption(key: kOptionAllowDeepLinkPassword) == 'Y';
       if (!allowDeepLinkPassword) {
