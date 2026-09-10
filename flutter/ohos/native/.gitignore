@@ -1,0 +1,3 @@
+# This crate is built standalone (it declares its own [workspace]), so the parent
+# repository's target/ ignore does not cover it.
+/target

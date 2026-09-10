@@ -114,10 +114,17 @@
 > - 结论：**采用 A-1**（改 `codec.rs` + 对齐 iOS 的 `server` 门控），shim 仅保留最小必要（若 EncoderCfg 形状需要）。
 
 ### P2 · N-API 桥接层
-- [ ] C++ napi 包装 `src/flutter_ffi.rs` C ABI
-- [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS
+> **方案已定（§7.3）**：不用手写 C++，改用 **`ohos-rs`**（napi-rs 的 OpenHarmony fork）。
+> crates.io 上的名字是 `napi-ohos` / `napi-derive-ohos` / `napi-build-ohos`（1.2.0）。
+> crate 位置：`flutter/ohos/native/`，`[lib] name = "rustdesk_ohos"` → 产出 `librustdesk_ohos.so`，
+> ArkTS 侧 `import bridge from 'librustdesk_ohos.so'`。构建需设 `OHOS_NDK_HOME`。
+- [x] 搭建 `flutter/ohos/native/` 骨架并**验证工具链打通** ✅
+  - `cargo build --release --target aarch64-unknown-linux-ohos` → Finished
+  - 产物 `librustdesk_ohos.so`（0.59 MB）验证为 AArch64 ELF，且导出 **`napi_register_module_v1`**（HarmonyOS NAPI 加载器入口）
+- [ ] 接入 RustDesk 核心：`rustdesk` 作为 path 依赖，把 `src/flutter_ffi.rs` 的导出逐个包成 `#[napi]` 函数
+- [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支）
 - [ ] 视频帧 → XComponent surface/纹理
-- [ ] `librustdesk.so` 放入 `entry/src/main/libs/arm64-v8a`
+- [ ] 打包为 HAR 并接入 HAP：`librustdesk_ohos.so` → `entry/src/main/libs/arm64-v8a/`
 
 ### P3 · ArkUI 重写
 - [ ] 鸿蒙设计规范重写（系统 Tabs/List/Dialog/SettingItem）
