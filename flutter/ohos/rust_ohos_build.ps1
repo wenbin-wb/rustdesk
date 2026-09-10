@@ -37,9 +37,35 @@ if (Test-Path $mingw) { $env:PATH = "$mingw;$env:PATH" }
 if (Test-Path "$llvm\libclang.dll") { $env:LIBCLANG_PATH = $llvm }
 
 # ...and it needs the target sysroot on its own command line, otherwise it cannot even
-# find stddef.h. bindgen reads these per-target before the generic variable.
-$env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=$sysroot"
-$env:BINDGEN_EXTRA_CLANG_ARGS = "--target=aarch64-linux-ohos --sysroot=$sysroot"
+# find stddef.h. libclang does not reliably discover its own resource directory (the one
+# holding stddef.h/stdarg.h) when loaded through clang-sys, so pass it explicitly too
+# rather than depending on discovery. bindgen reads the per-target variable first.
+$clangRes = Get-ChildItem "$ndk\llvm\lib\clang" -Directory -ErrorAction SilentlyContinue |
+  Select-Object -First 1 -ExpandProperty FullName
+$bindgenArgs = "--target=aarch64-linux-ohos --sysroot=$sysroot"
+if ($clangRes) { $bindgenArgs += " -resource-dir `"$clangRes`" -isystem `"$clangRes\include`"" }
+# The clang driver turns --sysroot into -internal-externc-isystem entries for the libc
+# headers, but libclang parses in-process and does not do that, so stdlib.h and friends
+# are not found unless they are named here.
+foreach ($inc in @("$sysroot\usr\include", "$sysroot\usr\include\aarch64-linux-ohos")) {
+  if (Test-Path $inc) { $bindgenArgs += " -isystem `"$inc`"" }
+}
+$env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_ohos = $bindgenArgs
+$env:BINDGEN_EXTRA_CLANG_ARGS = $bindgenArgs
+
+# magnum-opus (Opus audio) locates libopus through VCPKG_ROOT. Its build.rs keys the
+# pkg-config alternative on cfg(target_os = "linux"), and in a build script that is the
+# HOST, not the target -- so on a Windows host that branch is not even compiled and the
+# pkg-config feature cannot help. It wants $VCPKG_ROOT/installed/<arch>-<os>/{lib,include},
+# so C:\ohos-vcpkg-root/installed/arm64-linux is a junction to the cross-built opus.
+$env:VCPKG_ROOT = "C:\ohos-vcpkg-root"
+
+# pkgconf is shipped from MSYS2 in the mingw bin directory added to PATH above; keep it
+# available for any dependency that does consult pkg-config.
+if (Test-Path "$mingw\pkgconf.exe") { $env:PKG_CONFIG = "$mingw\pkgconf.exe" }
+$ohosLibs = "$env:USERPROFILE\ohos-libs\prefix"
+if (Test-Path "$ohosLibs\lib\pkgconfig") { $env:PKG_CONFIG_PATH = "$ohosLibs\lib\pkgconfig" }
+$env:PKG_CONFIG_ALLOW_CROSS = "1"
 
 # C/C++ cross compiler + archiver for the ohos target (used by build scripts).
 $env:CC_aarch64_unknown_linux_ohos  = "$llvm\clang.exe"
