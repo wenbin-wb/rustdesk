@@ -1,4 +1,4 @@
-import { FlutterPage } from '@ohos/flutter_ohos';
+import { FlutterPage } from './FlutterPage';
 
 @Entry
 @Component
