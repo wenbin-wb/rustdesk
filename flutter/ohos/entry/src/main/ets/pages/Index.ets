@@ -10,7 +10,7 @@
  * See common/Breakpoint.ets for the thresholds and why they are width-based.
  */
 
-import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle } from '@kit.UIDesignKit';
+import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { Breakpoint, observeBreakpoint, usesSideNavigation, pagePadding, maxContentWidth } from '../common/Breakpoint';
 import { RemoteTab, formatId } from '../components/RemoteTab';
 import { DevicesTab } from '../components/DevicesTab';
@@ -241,12 +241,15 @@ struct Index {
 
   @Builder
   private buildTabs() {
-    // HdsTabs from the UI Design Kit replaces the built-in Tabs. On the narrow breakpoint it
-    // renders the bar as a floating pill -- inset from the sides and lifted off the bottom,
-    // with the content visible behind and around it -- which is the HDS treatment for a
-    // bottom bar and is what makes the page read as full screen rather than as a page with a
-    // bar bolted underneath. On wide windows the same component is used vertically as a side
-    // rail, where the floating treatment does not apply.
+    // HdsTabs from the UI Design Kit, replacing the built-in Tabs.
+    //
+    // barOverlap(true) is what makes the bar float rather than occupy layout space, and
+    // barBottomMargin must be non-zero for the lift to show. Without barOverlap the bar keeps
+    // full width and reserves its own row -- measured on device as items spanning the whole
+    // 0..1276 with the bar flush at the screen edge, which is exactly "not floating".
+    //
+    // On the wide breakpoint the same component is used as a vertical side rail, where
+    // overlap is off because a rail sits beside the content rather than over it.
     HdsTabs({
       barPosition: usesSideNavigation(this.breakpoint) ? BarPosition.Start : BarPosition.End,
       controller: this.tabsController
@@ -266,19 +269,28 @@ struct Index {
       }
       .tabBar(new BottomTabBarStyle($r('app.media.tab_settings'), $r('app.string.tab_settings')))
     }
+    .width('100%')
+    .layoutWeight(1)
+    .barHeight(65)
+    .barOverlap(!usesSideNavigation(this.breakpoint))
     .vertical(usesSideNavigation(this.breakpoint))
     .scrollable(false)
-    .layoutWeight(1)
     .backgroundColor(Color.Transparent)
-    .barFloatingStyle(usesSideNavigation(this.breakpoint) ? undefined : {
-      // A width range is required for the bar to read as a floating pill. Without it the bar
-      // keeps the full width and only the margins change, which does not look floating.
-      // The three bands are the component's own breakpoints: under 440vp, 440-600vp, over
-      // 840vp.
-      barWidth: { smallWidth: '72%', mediumWidth: '62%', largeWidth: '52%' },
-      barSideMargin: 16,
-      barBottomMargin: 12
-    } as HdsTabsFloatingStyle)
+    .barFloatingStyle({
+      // Explicit widths per band, otherwise the pill keeps the full width once the style
+      // engages and only the margins move.
+      barWidth: { smallWidth: 260, mediumWidth: 320, largeWidth: 420 },
+      barBottomMargin: 20,
+      // A tinted gradient under the bar so content fades out behind it instead of being cut
+      // off at a hard edge.
+      gradientMask: { maskColor: '#66F1F3F5', maskHeight: 72 },
+      // The frosted material. IMMERSIVE is the translucent variant and ADAPTIVE follows the
+      // system theme, so dark mode needs no branch here.
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
   }
 
   /**
@@ -328,7 +340,9 @@ struct Index {
         left: pagePadding(this.breakpoint),
         right: pagePadding(this.breakpoint),
         top: 12,
-        bottom: 24
+        // The bar floats over the content (barOverlap), so the content has to leave room for
+        // it: the bar is 65vp tall with a 20vp lift, plus room to scroll past comfortably.
+        bottom: usesSideNavigation(this.breakpoint) ? 24 : 104
       })
     }
     .width('100%')
