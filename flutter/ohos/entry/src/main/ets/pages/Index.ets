@@ -1,5 +1,6 @@
 import { FlutterPage } from './FlutterPage';
 
+@Preview
 @Entry
 @Component
 struct Index {

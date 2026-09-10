@@ -17,9 +17,13 @@ export class ClipboardBridge {
 
   public init(channel: MethodChannel): void {
     this.channel = channel;
-    this.sysPasteboard.on('update', () => {
-      this.notifyClipboardUpdate();
-    });
+    try {
+      this.sysPasteboard.on('update', () => {
+        this.notifyClipboardUpdate();
+      });
+    } catch {
+      // Ignore listener error if system pasteboard service unavailable
+    }
   }
 
   public async getText(): Promise<string> {
