@@ -53,7 +53,9 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         stack.join("\n").to_string()
     );
     if !info.is_empty() {
-        #[cfg(target_os = "linux")]
+        // This crash handler is #[cfg(not(debug_assertions))], so it is only compiled in
+        // release builds -- which is why a debug `cargo check` cannot catch a mistake here.
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         linux::system_message(
             "RustDesk",
             &format!("Got signal {} and exit.{}", sig, info),

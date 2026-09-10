@@ -77,7 +77,8 @@
 - [x] `hbb_common` 编译通过（共享核心：proto/网络/config/加密）✅
 - [x] `base` 编译通过（客户端核心）✅
 - [x] `scrap` 编译通过（方案 A：门控 VPX/AOM + libyuv + 采集后端 + camera）
-- [ ] 根 crate（`librustdesk.so`）编译通过
+- [x] 根 crate **编译通过** ✅ `cargo check --lib --target aarch64-unknown-linux-ohos --features flutter` → **exit 0**（143 warnings，无 error）
+- [ ] `cargo build --release` 链接并产出 `librustdesk.so`（验证链接阶段）
 - [ ] 平台实现：设备信息 / 剪贴板 / 文件系统 / 音频 / 屏幕采集(占位)
 
 > **待清理（P1 收尾统一处理）**：`scrap` 在 ohos 下产生 8 条 warning（5 处 unused import、1 处 unused_mut、2 处 unused 变量），
@@ -180,9 +181,11 @@
 > 连带影响：`Cargo.lock` 相应移除 `portable-pty` 条目。
 
 ### 当前状态
-- ✅ `hbb_common`：`cargo check -p hbb_common --target aarch64-unknown-linux-ohos` **通过**
-- ✅ `base`：`cargo check -p base --target aarch64-unknown-linux-ohos` **通过**
-- 🔄 `scrap`：build.rs 需要 libyuv/libvpx/aom（vcpkg/pkg-config）+ bindgen，且 unix 下强制 `cfg(x11)` 编译 X11/Wayland 采集后端 → **ohos 下必须改**
+- ✅ `hbb_common` / `base` / `scrap`：`cargo check` **通过**
+- ✅ **根 crate：`cargo check --lib --target aarch64-unknown-linux-ohos --features flutter` → exit 0**
+  （即 **P1 核心里程碑达成**：依赖图全通 + 根 crate 类型检查通过）
+- 🔄 待验证：`cargo build --release` 的**链接**阶段能否产出 `librustdesk.so`
+- ⏳ 待清理：143 条 warning（多为门控工作留下的 unused import）
 - 构建脚本：`flutter/ohos/rust_ohos_build.ps1`（封装全部交叉编译环境变量）
 
 ### scrap 的处理方案（已定：方案 A）
