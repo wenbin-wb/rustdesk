@@ -1,4 +1,5 @@
 import { FlutterPage } from './FlutterPage';
+import { DesktopCanvas } from './DesktopCanvas';
 
 @Component
 export struct RemoteSessionPage {
@@ -11,34 +12,10 @@ export struct RemoteSessionPage {
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      // Background Remote Stream Canvas / Flutter Surface
-      FlutterPage({ viewId: 'remote_session_view' })
+      // Interactive Remote Stream Canvas with live touch input
+      DesktopCanvas({ targetId: this.targetId })
         .width('100%')
         .height('100%')
-
-      // Fallback Canvas Simulation when Flutter Native surface is rendering or idle
-      Column() {
-        Blank()
-        Column({ space: 10 }) {
-          Image($r('app.media.icon'))
-            .width(64)
-            .height(64)
-            .opacity(0.8)
-          Text(`已连接到: ${this.targetId}`)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FFFFFF')
-          Text(`加密传输中 · 延迟: ${this.latencyMs}ms · 模式: ${this.qualityMode}`)
-            .fontSize(12)
-            .fontColor('#A0AEC0')
-        }
-        .padding(24)
-        .backgroundColor('#66000000')
-        .borderRadius(16)
-        Blank()
-      }
-      .width('100%')
-      .height('100%')
 
       // Top Floating Toolbar (Matches iOS/Android Remote Control Bar)
       if (this.showToolbar) {
