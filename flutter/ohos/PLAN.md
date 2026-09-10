@@ -140,7 +140,12 @@
   - 产物 `librustdesk_ohos.so` **2.07 MB**，实测 **32/32 导出符号全部在位**
 - [ ] 事件回调（连接状态/剪贴板/会话）→ ArkTS（接上 §「push_ui_event」预留的 ohos 分支，用 NAPI ThreadsafeFunction）
 - [ ] 视频帧 → XComponent surface/纹理
-- [ ] 打包为 HAR 并接入 HAP：`librustdesk_ohos.so` → `entry/src/main/libs/arm64-v8a/`
+- [x] **打包接入 HAP：端到端链路打通** ✅
+  - 部署脚本 `flutter/ohos/build_bridge.ps1`（构建 + 部署；`.so` 为构建产物、已 gitignore）
+  - ArkTS 门面 `entry/src/main/ets/platform/RustDeskBridge.ets`：以带类型的 `interface` 镜像 NAPI 成员，页面不直接碰原始 import
+  - `hvigorw assembleHap` → **BUILD SUCCESSFUL**，`CompileArkTS` 通过（即 `.so` import 被接受并类型检查）
+  - HAP 实测 **2.54 MB**，内含 `libs/arm64-v8a/librustdesk_ohos.so`（2118 KB）
+  - ⚠️ **关键坑（已修正并写入脚本注释）**：预编译 `.so` 必须放在**模块根 `entry/libs/<abi>/`**；放在 `entry/src/main/libs/<abi>/` 会**编译通过但被静默排除出 HAP**，导致"构建成功、真机加载失败"
 
 ### P3 · ArkUI 重写
 - [ ] 鸿蒙设计规范重写（系统 Tabs/List/Dialog/SettingItem）

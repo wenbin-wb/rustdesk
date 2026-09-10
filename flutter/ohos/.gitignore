@@ -7,5 +7,9 @@ oh_modules/
 *.har
 local.properties
 node_modules/
+# Native libraries are built locally by build_bridge.ps1 and are not source, the same way
+# the Android build treats jniLibs. Run that script after cloning before building the HAP.
+# The module-root libs/ is where hvigor picks prebuilt .so files up from.
+entry/libs/
 !**/resources/**/media/*.png
 !**/resources/**/media/*.svg
