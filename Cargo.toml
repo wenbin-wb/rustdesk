@@ -102,7 +102,10 @@ ctrlc = "3.2"
 # arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
-portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
+# Temporarily disabled for the HarmonyOS (ohos) port: the wezterm fork fetch
+# stalls on this network and portable-pty is cfg-excluded for ohos anyway
+# (desktop terminal feature only). Restore when building desktop targets.
+# portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
 qrcode-generator = "4.1"

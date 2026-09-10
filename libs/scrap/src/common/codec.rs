@@ -12,10 +12,14 @@ use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SU
 #[cfg(feature = "vram")]
 use crate::vram::*;
 use crate::{
+    common::GoogleImage, CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, ImageTexture,
+};
+// HarmonyOS ships no libvpx/libaom: decoding goes through the native HarmonyOS
+// codec backend instead (see flutter/ohos/PLAN.md, decision "method A").
+#[cfg(not(target_env = "ohos"))]
+use crate::{
     aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
-    common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, ImageTexture,
 };
 
 use base::message_proto::{

@@ -1,3 +1,4 @@
+#[cfg(not(target_env = "ohos"))]
 pub use self::vpxcodec::*;
 use base::message_proto::{video_frame, Chroma, VideoFrame};
 use hbb_common::{bail, log, ResultType};
@@ -39,22 +40,29 @@ cfg_if! {
 }
 
 pub mod codec;
+// HarmonyOS uses the native SDK for conversion and software codecs instead of
+// libyuv/libvpx/libaom (see flutter/ohos/PLAN.md, decision "method A").
+#[cfg(not(target_env = "ohos"))]
 pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
+#[cfg(not(target_env = "ohos"))]
 pub mod vpxcodec;
 #[cfg(feature = "vram")]
 pub mod vram;
+#[cfg(not(target_env = "ohos"))]
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
 pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
+#[cfg(not(target_env = "ohos"))]
 pub mod aom;
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub mod camera;
 pub mod record;
+#[cfg(not(target_env = "ohos"))]
 mod vpx;
 
 #[repr(usize)]
@@ -131,7 +139,7 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 
 pub trait TraitCapturer {
     // We doesn't support
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
 
     #[cfg(windows)]
@@ -175,13 +183,13 @@ pub trait TraitPixelBuffer {
     fn pixfmt(&self) -> Pixfmt;
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub enum Frame<'a> {
     PixelBuffer(PixelBuffer<'a>),
     Texture((*mut c_void, usize)),
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 impl Frame<'_> {
     pub fn valid<'a>(&'a self) -> bool {
         match self {
@@ -440,6 +448,7 @@ pub trait GoogleImage {
         (w * bytes_per_pixel + align - 1) & !(align - 1)
     }
     // rgb [in/out] fmt and stride must be set in ImageRgb
+    #[cfg(not(target_env = "ohos"))]
     fn to(&self, rgb: &mut ImageRgb) {
         rgb.w = self.width();
         rgb.h = self.height();

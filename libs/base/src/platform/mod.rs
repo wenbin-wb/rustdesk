@@ -1,4 +1,4 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod linux;
 
 #[cfg(target_os = "macos")]

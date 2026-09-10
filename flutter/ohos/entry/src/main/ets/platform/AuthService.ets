@@ -7,6 +7,22 @@ export interface LoginResult {
   user?: UserProfile;
 }
 
+interface LoginResponseUser {
+  name?: string;
+  email?: string;
+  avatar?: string;
+}
+
+interface LoginResponseBody {
+  access_token?: string;
+  token?: string;
+  username?: string;
+  email?: string;
+  avatar?: string;
+  user?: LoginResponseUser;
+  error?: string;
+}
+
 export class AuthService {
   public static async login(
     account: string,
@@ -54,22 +70,6 @@ export class AuthService {
         connectTimeout: 8000,
         readTimeout: 8000
       });
-
-interface LoginResponseUser {
-  name?: string;
-  email?: string;
-  avatar?: string;
-}
-
-interface LoginResponseBody {
-  access_token?: string;
-  token?: string;
-  username?: string;
-  email?: string;
-  avatar?: string;
-  user?: LoginResponseUser;
-  error?: string;
-}
 
       if (response.responseCode === 200) {
         const bodyStr = typeof response.result === 'string' ? response.result : JSON.stringify(response.result);

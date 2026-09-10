@@ -17,11 +17,20 @@ rustflags = [
 [net]
 git-fetch-with-cli = true
 
+# Fast crates.io mirror (China) for dependency downloads
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+# Paths go through the space-free junction C:\ohos-ndk -> DevEco OHOS native dir,
+# because CFLAGS/link-args cannot carry a sysroot path containing spaces.
 [target.aarch64-unknown-linux-ohos]
-linker = "D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm/bin/clang.exe"
-ar = "D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm/bin/llvm-ar.exe"
+linker = "C:/ohos-ndk/llvm/bin/clang.exe"
+ar = "C:/ohos-ndk/llvm/bin/llvm-ar.exe"
 rustflags = [
     "-C", "link-arg=--target=aarch64-linux-ohos",
-    "-C", "link-arg=--sysroot=D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/sysroot",
+    "-C", "link-arg=--sysroot=C:/ohos-ndk/sysroot",
     "-C", "link-arg=-D__MUSL__",
 ]

@@ -232,6 +232,10 @@ fn main() {
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    // HarmonyOS: no X11/Wayland/DXGI/Quartz capture backend, and no libvpx/aom/libyuv.
+    // Capture and decoding go through the native HarmonyOS SDK (AVScreenCapture / AVCodec).
+    let is_ohos = target_env == "ohos";
 
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
@@ -244,14 +248,18 @@ fn main() {
     env::remove_var("CARGO_CFG_TARGET_FEATURE");
     env::set_var("CARGO_CFG_TARGET_FEATURE", "crt-static");
 
-    find_package("libyuv");
-    gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
-    gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
-    gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
+    if !is_ohos {
+        find_package("libyuv");
+        gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
+        gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
+        gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
+    }
     // ffmpeg();
 
     if target_os == "ios" {
         // nothing
+    } else if is_ohos {
+        // nothing: native HarmonyOS capture/codec only
     } else if target_os == "android" {
         println!("cargo:rustc-cfg=android");
     } else if cfg!(windows) {
