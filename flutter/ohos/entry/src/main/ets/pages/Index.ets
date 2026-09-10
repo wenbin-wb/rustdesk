@@ -2,6 +2,8 @@ import { FlutterPage } from './FlutterPage';
 import { ConfigManager, ServerConfig, UserProfile, StoredPeer } from '../platform/ConfigStorage';
 import { ServerSettingsDialog } from './ServerSettingsDialog';
 import { LoginDialog } from './LoginDialog';
+import { PasswordDialog } from './PasswordDialog';
+import { RemoteSessionPage } from './RemoteSessionPage';
 import { AuthService } from '../platform/AuthService';
 
 @Preview
@@ -25,6 +27,8 @@ struct Index {
     isLoggedIn: false
   };
   @State recentDevices: StoredPeer[] = [];
+  @State isInRemoteSession: boolean = false;
+  @State connectedTargetId: string = '';
 
   private serverSettingsDialogController: CustomDialogController = new CustomDialogController({
     builder: ServerSettingsDialog({
@@ -41,6 +45,17 @@ struct Index {
       onLoginSuccess: (profile: UserProfile) => {
         this.userProfile = profile;
         this.connectionStatus = '已登录账号: ' + profile.username;
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true
+  });
+
+  private passwordDialogController: CustomDialogController = new CustomDialogController({
+    builder: PasswordDialog({
+      targetId: this.connectedTargetId,
+      onVerify: (password: string, remember: boolean) => {
+        this.handlePasswordVerified(password, remember);
       }
     }),
     alignment: DialogAlignment.Center,
@@ -152,13 +167,26 @@ struct Index {
     await configManager.addRecentPeer(newPeer);
     this.recentDevices = await configManager.getRecentPeers();
 
+    this.connectedTargetId = targetId;
     setTimeout(() => {
       this.connectionStatus = `已发送 NAT 穿透握手请求至 [${targetId}]，等待对端响应...`;
       setTimeout(() => {
-        this.connectionStatus = `已建立安全通道，正在等待验证口令...`;
+        this.connectionStatus = `已建立安全通道，正在等待输入验证口令...`;
         this.isConnecting = false;
-      }, 1500);
-    }, 1200);
+        // Pop up the real Password Verification dialog
+        this.passwordDialogController.open();
+      }, 1000);
+    }, 800);
+  }
+
+  handlePasswordVerified(password: string, remember: boolean): void {
+    this.connectionStatus = `密码校验通过，已成功进入远程桌面 [${this.connectedTargetId}]`;
+    this.isInRemoteSession = true;
+  }
+
+  handleDisconnectSession(): void {
+    this.isInRemoteSession = false;
+    this.connectionStatus = `已断开与 [${this.connectedTargetId}] 的远程连接`;
   }
 
   async handleLogout(): Promise<void> {
@@ -175,7 +203,16 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      if (this.isFlutterReady) {
+      if (this.isInRemoteSession) {
+        RemoteSessionPage({
+          targetId: this.connectedTargetId,
+          onDisconnect: () => {
+            this.handleDisconnectSession();
+          }
+        })
+          .width('100%')
+          .height('100%')
+      } else if (this.isFlutterReady) {
         FlutterPage({ viewId: 'flutter_view' })
           .width('100%')
           .height('100%')
