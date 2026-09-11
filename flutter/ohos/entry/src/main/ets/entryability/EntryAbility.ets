@@ -112,13 +112,24 @@ export default class EntryAbility extends UIAbility {
    * TYPE_SYSTEM is the status bar (its top rect); the navigation indicator is the gesture bar
    * at the bottom (its bottom rect). Anything not reported stays 0, so a device without one
    * simply gets no inset.
+   *
+   * Guarded per call rather than relying on the caller's try/catch. getWindowAvoidArea is
+   * flagged as throwing, and if the first query threw, the second would never run -- leaving
+   * the page with no top inset, i.e. the header under the status bar, which is the very defect
+   * this was written to fix. One query failing must not cancel the other.
    */
   private publishAvoidArea(win: window.Window, type: window.AvoidAreaType, key: string): void {
-    const area = win.getWindowAvoidArea(type);
-    const height = type === window.AvoidAreaType.TYPE_SYSTEM
-      ? area.topRect.height
-      : area.bottomRect.height;
-    AppStorage.setOrCreate(key, height);
+    try {
+      const area = win.getWindowAvoidArea(type);
+      const height = type === window.AvoidAreaType.TYPE_SYSTEM
+        ? area.topRect.height
+        : area.bottomRect.height;
+      AppStorage.setOrCreate(key, height);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'avoid area unavailable: %{public}s', key);
+      // Explicit 0 rather than leaving the previous value: "no inset" is self-consistent.
+      AppStorage.setOrCreate(key, 0);
+    }
   }
 
   onDestroy(): void {

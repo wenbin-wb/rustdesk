@@ -11,11 +11,17 @@
 #   pwsh -File flutter/ohos/dump_ui.ps1 -Filter "连接"      # only matching nodes
 #   pwsh -File flutter/ohos/dump_ui.ps1 -Tap "连接"         # tap the first node with this text
 #   pwsh -File flutter/ohos/dump_ui.ps1 -Types TextInput    # only these component types
+#   pwsh -File flutter/ohos/dump_ui.ps1 -Bundle <name>      # only that app's window
+#
+# Use -Bundle when checking our own layout. The default dump merges every window, so a system
+# panel or status-bar overlay can appear as if it were part of the app -- which is how a stray
+# "设置" in the status bar band was briefly mistaken for our content bleeding upward.
 
 param(
   [string]$Filter = "",
   [string]$Tap = "",
   [string]$Types = "",
+  [string]$Bundle = "",
   [switch]$Raw
 )
 
@@ -24,7 +30,8 @@ $remote = "/data/local/tmp/dump_ui.json"
 $local = Join-Path $env:TEMP "dump_ui.json"
 
 function Get-Nodes {
-  & $hdc shell "uitest dumpLayout -p $remote" 2>&1 | Out-Null
+  $bundleArg = if ($Bundle) { " -b $Bundle" } else { "" }
+  & $hdc shell "uitest dumpLayout -p $remote$bundleArg" 2>&1 | Out-Null
   Remove-Item $local -ErrorAction SilentlyContinue
   & $hdc file recv $remote $local 2>&1 | Out-Null
   if (-not (Test-Path $local)) { throw "no layout dump produced" }

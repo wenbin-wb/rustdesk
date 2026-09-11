@@ -45,6 +45,13 @@ export class ClipboardBridge {
     if (!board) {
       return;
     }
+    // Only subscribe when there is somewhere for the events to go. EntryAbility calls init()
+    // with no callback, so registering regardless would leave a listener whose handler returns
+    // immediately on every update -- dead weight that also hides the fact that nothing consumes
+    // clipboard changes yet.
+    if (!this.onClipboardChangedCallback) {
+      return;
+    }
     try {
       board.on('update', () => {
         this.notifyClipboardUpdate();
@@ -84,11 +91,23 @@ export class ClipboardBridge {
     }
   }
 
+  /**
+   * Deliver a clipboard change to the registered callback.
+   *
+   * The invocation is guarded: this runs from the system's update event, where a throw inside a
+   * consumer's handler would become an unhandled rejection rather than something the consumer
+   * can see.
+   */
   private async notifyClipboardUpdate(): Promise<void> {
-    if (!this.onClipboardChangedCallback) {
+    const callback = this.onClipboardChangedCallback;
+    if (!callback) {
       return;
     }
-    const text = await this.getText();
-    this.onClipboardChangedCallback(text);
+    try {
+      const text = await this.getText();
+      callback(text);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'clipboard change handler failed: %{public}s', JSON.stringify(e));
+    }
   }
 }

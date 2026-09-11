@@ -244,11 +244,23 @@ struct Index {
     });
   }
 
+  /**
+   * Show the password prompt for a peer.
+   *
+   * Guarded because it is called from both the success and the failure branch of the same
+   * chain: if open() threw inside the success branch, the rejection would reach the failure
+   * branch, which calls this again, and a second throw would escape as an unhandled rejection
+   * -- turning a dialog that failed to appear into a crash.
+   */
   private openPasswordDialog(targetId: string): void {
     this.passwordTargetId = targetId;
     // Bumped after the target, so the dialog sees the new peer and the clear in one update.
     this.passwordOpenRevision++;
-    this.passwordDialogController.open();
+    try {
+      this.passwordDialogController.open();
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'could not open the password dialog: %{public}s', JSON.stringify(e));
+    }
   }
 
   private handlePasswordVerified(password: string, remember: boolean): void {
