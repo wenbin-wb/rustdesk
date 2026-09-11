@@ -1558,6 +1558,22 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         #[cfg(target_os = "android")]
                         crate::clipboard::handle_msg_clipboard(cb);
+                        // The single-Clipboard variant, which a peer sends when it believes we
+                        // cannot handle the multi-clipboard one -- an older peer, or one that
+                        // read our platform as something it does not recognise. HarmonyOS had no
+                        // arm here either, so that path was dropped in silence as well; the text
+                        // goes to the front end, which writes the pasteboard.
+                        #[cfg(target_env = "ohos")]
+                        {
+                            let content = if cb.compress {
+                                hbb_common::compress::decompress(&cb.content)
+                            } else {
+                                cb.content.to_vec()
+                            };
+                            if let Ok(content) = String::from_utf8(content) {
+                                crate::flutter::ohos_set_pending_clipboard(content);
+                            }
+                        }
                     }
                 }
                 Some(message::Union::MultiClipboards(_mcb)) => {

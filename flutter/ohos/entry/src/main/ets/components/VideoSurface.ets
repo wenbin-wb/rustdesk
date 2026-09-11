@@ -60,6 +60,8 @@ export struct VideoSurface {
   private downAtMs: number = 0;
   private dragging: boolean = false;
   private scrolled: boolean = false;
+  /** Travel not yet worth a scroll notch, carried between move events. */
+  private scrollRemainderPx: number = 0;
   private modifiers: Modifiers = noModifiers();
 
   /**
@@ -168,21 +170,38 @@ export struct VideoSurface {
     }
     const rect: SurfaceRect = { w: this.surfaceW, h: this.surfaceH };
 
-    const touch = event.touches.length > 0 ? event.touches[0] : undefined;
+    // Which finger to read depends on the event.
+    //
+    // `touches` is every point currently down; `changedTouches` is the point that triggered this
+    // event. On the final Up of a single-finger gesture the lifted finger is the changed one and
+    // `touches` is empty, so reading `touches` here returned early and no click was ever sent --
+    // and a drag never released, leaving the button held on the peer. On a Move the moving finger
+    // is in both, but `touches` is the right one because a move with several fingers down should
+    // track the set rather than the last one to report.
+    const points = event.type === TouchType.Move ? event.touches : event.changedTouches;
+    const touch = points && points.length > 0 ? points[0] : undefined;
     if (!touch) {
       return;
     }
     const x = touch.x;
     const y = touch.y;
+    // How many fingers are down after this event: 1 for the first finger down, 0 for the last one
+    // up. Read from `touches`, because it is the count that survives that decides whether a
+    // gesture is still in progress.
+    const fingersDown = event.touches ? event.touches.length : 0;
 
     switch (event.type) {
       case TouchType.Down:
-        if (event.touches.length > 1) {
+        if (fingersDown > 1) {
           // A second finger arrived: this is a scroll, not a click.
           this.scrolled = true;
           input.releaseAll(this.modifiers);
           break;
         }
+        // A button left held cannot be released from this side, so release defensively before
+        // starting a new gesture. If the previous release went missing -- a dropped event, or a
+        // gesture the system took away -- this is what recovers from it.
+        input.releaseAll(this.modifiers);
         this.downX = x;
         this.downY = y;
         this.lastX = x;
@@ -190,13 +209,16 @@ export struct VideoSurface {
         this.downAtMs = Date.now();
         this.dragging = false;
         this.scrolled = false;
+        // Drop any leftover travel: it belongs to the previous gesture, and carrying it would
+        // make the next scroll jump by an amount the user did not just move.
+        this.scrollRemainderPx = 0;
         // Move the pointer to where the finger landed before pressing, so a tap lands where the
         // user aimed rather than wherever the pointer happened to be.
         this.sendMove(input, x, y, rect, size);
         break;
 
       case TouchType.Move:
-        if (event.touches.length > 1 || this.scrolled) {
+        if (fingersDown > 1 || this.scrolled) {
           // Two-finger drag scrolls. Whichever axis moved more is the one being scrolled; sending
           // both would scroll diagonally on a gesture the user meant as vertical.
           const dy = this.lastY - y;
@@ -257,13 +279,18 @@ export struct VideoSurface {
     }
   }
 
-  /** Scroll by a pixel delta, converted into the notches the core expects. */
+  /**
+   * Scroll by a pixel delta, converted into the notches the core expects.
+   *
+   * The remainder is carried between events. Rounding each event on its own would make a slow
+   * drag scroll nothing at all: a move event covers only a few vp, and a notch is 40, so every
+   * event would round to zero and the accumulated travel would be discarded over and over.
+   */
   private accumulateScroll(input: RemoteInput, deltaPx: number): void {
-    // A notch per SCROLL_NOTCH_VP of travel, so a slow drag scrolls a little and a fast one more.
-    // Rounded per event rather than accumulated: a sub-notch remainder is not worth carrying, and
-    // carrying it would need state that has to be reset whenever a gesture starts.
-    const notches = Math.round(deltaPx / SCROLL_NOTCH_VP);
+    this.scrollRemainderPx += deltaPx;
+    const notches = Math.trunc(this.scrollRemainderPx / SCROLL_NOTCH_VP);
     if (notches !== 0) {
+      this.scrollRemainderPx -= notches * SCROLL_NOTCH_VP;
       input.wheel(notches, this.modifiers);
     }
   }
