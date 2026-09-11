@@ -9,7 +9,7 @@
 import { SectionCard } from './SectionCard';
 import { HdsListItemCard } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { getMyId, getTemporaryPassword, updateTemporaryPassword } from '../platform/RustDeskBridge';
+import { getMyId, getTemporaryPassword, updateTemporaryPassword, LanPeer, getLanPeerList } from '../platform/RustDeskBridge';
 import { ConfigManager, StoredPeer } from '../platform/ConfigStorage';
 
 const DOMAIN = 0x0000;
@@ -43,6 +43,16 @@ export struct RemoteTab {
   @State private recentDevices: StoredPeer[] = [];
 
   /**
+   * Peers the core has heard from on the local network.
+   *
+   * Refreshed on a timer while the LAN sub-tab is showing, because discovery is continuous in the
+   * core: a peer that announces itself a second after the tab opens should appear without the
+   * user having to leave and come back.
+   */
+  @State private lanPeers: LanPeer[] = [];
+  private lanTimerId: number = -1;
+
+  /**
    * Incremented by the page whenever the stored peer list changes.
    *
    * This tab loads once, in aboutToAppear, and a TabContent stays alive after it has been
@@ -53,6 +63,28 @@ export struct RemoteTab {
   aboutToAppear(): void {
     this.loadDeviceIdentity();
     this.loadPeers();
+    this.lanTimerId = setInterval(() => {
+      // Only read while the list is on screen: the core keeps discovering either way, and
+      // re-reading a list nobody is looking at is wasted work.
+      if (this.subTab === 1) {
+        this.loadLanPeers();
+      }
+    }, 2000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.lanTimerId !== -1) {
+      clearInterval(this.lanTimerId);
+      this.lanTimerId = -1;
+    }
+  }
+
+  private loadLanPeers(): void {
+    try {
+      this.lanPeers = getLanPeerList();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'could not read LAN peers: %{public}s', JSON.stringify(e));
+    }
   }
 
   onPeersChanged(): void {
@@ -283,6 +315,9 @@ export struct RemoteTab {
             .fontColor(this.subTab === 1 ? $r('app.color.brand') : $r('app.color.text_secondary'))
             .onClick(() => {
               this.subTab = 1;
+              // Read immediately rather than waiting for the timer, so switching to the tab shows
+              // what the core already knows instead of an empty list for two seconds.
+              this.loadLanPeers();
             })
         }
         .width('100%')
@@ -296,7 +331,16 @@ export struct RemoteTab {
             }, (device: StoredPeer) => device.id)
           }
         } else {
-          this.buildEmptyState($r('app.string.peers_lan_scanning'), $r('app.string.peers_lan_hint'))
+          // The LAN list belongs to the core, which discovers peers continuously; this only
+          // re-reads what it has found, so an empty list means nothing has been heard yet rather
+          // than that a scan is pending.
+          if (this.lanPeers.length === 0) {
+            this.buildEmptyState($r('app.string.peers_lan_scanning'), $r('app.string.peers_lan_hint'))
+          } else {
+            ForEach(this.lanPeers, (peer: LanPeer) => {
+              this.buildLanPeerRow(peer)
+            }, (peer: LanPeer) => peer.id)
+          }
         }
       }
       .width('100%')
@@ -315,6 +359,27 @@ export struct RemoteTab {
       onClick: () => {
         this.remoteIdInput = device.id;
         this.onConnect(device.id);
+      }
+    })
+      .width('100%')
+  }
+
+  /**
+   * A peer found on the local network.
+   *
+   * The hostname is what distinguishes one entry from another here -- these peers have no alias,
+   * and showing only the id would make two of them indistinguishable at a glance.
+   */
+  @Builder
+  private buildLanPeerRow(peer: LanPeer) {
+    HdsListItemCard({
+      textItem: {
+        primaryText: { text: peer.hostname.length > 0 ? peer.hostname : peer.id },
+        secondaryText: { text: `${peer.id}  ${peer.platform}` }
+      },
+      onClick: () => {
+        this.remoteIdInput = peer.id;
+        this.onConnect(peer.id);
       }
     })
       .width('100%')

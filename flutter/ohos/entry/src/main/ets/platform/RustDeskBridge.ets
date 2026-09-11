@@ -191,6 +191,33 @@ export function getLanPeers(): string {
 }
 
 /**
+ * Peers discovered on the local network, parsed.
+ *
+ * Discovery is the core's: it listens for RustDesk's LAN announcements. The list is read from the
+ * core's store rather than held here, so it reflects what the core currently knows rather than a
+ * snapshot taken when the page was built.
+ */
+export interface LanPeer {
+  id: string;
+  username: string;
+  hostname: string;
+  platform: string;
+}
+
+export function getLanPeerList(): LanPeer[] {
+  const raw = native.mainGetLanPeers();
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as LanPeer[];
+    return parsed ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
  * Read one core option by key.
  *
  * The key vocabulary is the core's, e.g. `custom-rendezvous-server`, `relay-server`,
