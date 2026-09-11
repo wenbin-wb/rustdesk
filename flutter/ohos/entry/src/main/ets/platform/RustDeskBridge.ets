@@ -304,12 +304,12 @@ export interface AbPeer {
   alias?: string;
   platform?: string;
   tags?: string[];
-  /** The account that owns the device. */
+  /** The stored peer password, which the account keeps so a connect need not ask for it. */
+  password?: string;
+  /** The peer's public key hash, used to pin the connection. */
+  hash?: string;
   loginName?: string;
-  /** The group the device belongs to, as the account organises it. */
-  device_group_name?: string;
-  /** A note on the device, from the account. */
-  note?: string;
+  forceAlwaysRelay?: boolean;
   /** Whether this peer is favourited, as the core stores it. */
   favorite?: boolean;
 }

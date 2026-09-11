@@ -90,23 +90,28 @@ interface SharedProfile {
   name?: string;
 }
 
-/** `/api/ab/peers`, one peer, as the server nests it. */
+/**
+ * `/api/ab/peers`, one peer.
+ *
+ * Flat, not nested: this endpoint returns the peer's fields at the top level, including the alias
+ * the user gave it. The `info` object that nests `username` and `device_name` belongs to the
+ * rendezvous peer payload -- a different endpoint with a different shape. The two are easy to
+ * conflate, and doing so yields peers with an id and nothing else.
+ */
 interface ServerPeer {
   id?: string;
-  /** Device details. The peer's name, OS and hostname are all in here, not at the top level. */
-  info?: ServerPeerInfo;
-  /** The account that owns the device. */
-  user_name?: string;
-  device_group_name?: string;
-  note?: string;
-}
-
-/** The `info` object inside a peer. */
-interface ServerPeerInfo {
   username?: string;
-  /** An OS string such as "Windows 11 / 10.0.22631", which maps to a platform constant. */
-  os?: string;
-  device_name?: string;
+  hostname?: string;
+  /** The name the user gave this device in their address book. */
+  alias?: string;
+  platform?: string;
+  tags?: string[];
+  /** The stored peer password, which the server keeps so other clients can use it. */
+  password?: string;
+  /** The peer's public key hash, used to pin the connection. */
+  hash?: string;
+  loginName?: string;
+  forceAlwaysRelay?: boolean;
 }
 
 /**
@@ -399,37 +404,37 @@ async function loadBook(base: string, token: string, guid: string, name: string)
     if (id.length === 0) {
       continue;
     }
-    // The name, OS and hostname all live in `info`; reading them from the top level yields a peer
-    // with an id and nothing else, which is what made an earlier version list 22 blank entries.
-    const info = raw.info;
     peers.push({
       id: id,
-      username: info?.username ?? '',
-      hostname: info?.device_name ?? '',
-      // No alias from the server: an alias is this device's own name for a peer, held locally.
-      alias: '',
-      platform: platformOf(info?.os),
-      tags: [],
-      loginName: raw.user_name ?? '',
-      device_group_name: raw.device_group_name ?? '',
-      note: raw.note ?? ''
+      username: raw.username ?? '',
+      hostname: raw.hostname ?? '',
+      alias: raw.alias ?? '',
+      platform: platformOf(raw.platform),
+      tags: Array.isArray(raw.tags) ? raw.tags : [],
+      loginName: raw.loginName ?? '',
+      // The stored password and key hash travel with the peer, which is what lets a connect skip
+      // asking for a password the account already has.
+      password: raw.password ?? '',
+      hash: raw.hash ?? '',
+      forceAlwaysRelay: raw.forceAlwaysRelay === true
     });
   }
   return { guid: guid, name: name, tags: [], peers: peers };
 }
 
 /**
- * The platform constant for the server's OS string.
+ * The platform constant for what the server sends.
  *
- * The server sends something like "Windows 11 / 10.0.22631", so the part before the separator is
- * the platform. The set is the core's small enum rather than free text, because the UI matches on
- * it to pick an icon; anything unrecognised is left empty rather than guessed at.
+ * The address-book endpoint sends a plain name ("Windows", "Linux"); the rendezvous payload sends
+ * a fuller string ("Windows 11 / 10.0.22631"). Both are handled, because the shape depends on
+ * which endpoint the value came from and the UI matches on this to pick an icon. Anything
+ * unrecognised is left empty rather than guessed at.
  */
 function platformOf(os: string | undefined): string {
   if (!os) {
     return '';
   }
-  const head = os.split(' / ')[0].toLowerCase();
+  const head = os.split(' / ')[0].trim().toLowerCase();
   if (head.startsWith('windows')) {
     return 'Windows';
   }
