@@ -1599,6 +1599,27 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         #[cfg(target_os = "android")]
                         crate::clipboard::handle_msg_multi_clipboards(_mcb);
+                        // HarmonyOS had no arm on this branch, so the peer's clipboard was
+                        // silently dropped. It cannot apply the clipboard itself -- the core's
+                        // clipboard module is excluded there, exactly as on iOS -- so the text is
+                        // handed to the front end, which writes the system pasteboard from ArkTS.
+                        #[cfg(target_env = "ohos")]
+                        {
+                            if let Some(cb) = _mcb
+                                .clipboards
+                                .iter()
+                                .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Text))
+                            {
+                                let content = if cb.compress {
+                                    hbb_common::compress::decompress(&cb.content)
+                                } else {
+                                    cb.content.to_vec()
+                                };
+                                if let Ok(content) = String::from_utf8(content) {
+                                    crate::flutter::ohos_set_pending_clipboard(content);
+                                }
+                            }
+                        }
                     }
                 }
                 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]

@@ -574,3 +574,27 @@ pub fn session_input_string(session_id: String, value: String) {
 // out for mobile targets -- the same as android and ios -- so it would compile, be callable, and
 // do nothing, which is worse than not having it: the peer's cursor handling would look handled
 // while never being told anything.
+
+// --- clipboard ----------------------------------------------------------------
+//
+// The system pasteboard is read and written from ArkTS, because that is where the platform API
+// lives. The core's own clipboard module is excluded for HarmonyOS, exactly as for iOS, so text
+// crosses in both directions instead of the core applying it itself.
+
+/// Take clipboard text the peer has sent, or an empty string when there is nothing new.
+///
+/// Taken rather than read: the caller writes it to the pasteboard, and returning the same value
+/// again would keep re-applying a clipboard the user may since have replaced.
+#[napi(js_name = "clipboardTakePending")]
+pub fn clipboard_take_pending() -> String {
+    librustdesk::flutter_ffi::clipboard_take_pending()
+}
+
+/// Send this device's clipboard text to the peer.
+///
+/// Empty string on success, otherwise why it could not be sent. The usual reason is that there is
+/// no session, which is not worth showing the user.
+#[napi(js_name = "clipboardSend")]
+pub fn clipboard_send(text: String) -> String {
+    librustdesk::flutter_ffi::clipboard_send(text)
+}

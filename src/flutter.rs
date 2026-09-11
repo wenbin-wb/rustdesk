@@ -1587,6 +1587,71 @@ pub fn ohos_get_display_size(session_id: &SessionID, display: usize) -> (usize, 
         .unwrap_or((0, 0))
 }
 
+/// Clipboard text the peer has sent, waiting for the front end to collect it.
+///
+/// HarmonyOS reads and writes the system pasteboard from ArkTS, because that is where the
+/// platform's API lives -- the core's own clipboard module is excluded there, exactly as on iOS.
+/// So the core hands the text across instead of applying it itself, and the front end writes it
+/// to the pasteboard.
+///
+/// Only the newest value is kept: a clipboard holds one current value, and keeping older ones
+/// would let the pasteboard settle on a stale entry whenever the front end polls more slowly
+/// than the peer sends.
+#[cfg(target_env = "ohos")]
+lazy_static::lazy_static! {
+    static ref OHOS_PENDING_CLIPBOARD: std::sync::Mutex<Option<String>> = Default::default();
+}
+
+/// Record clipboard text received from the peer.
+#[cfg(target_env = "ohos")]
+pub fn ohos_set_pending_clipboard(text: String) {
+    *OHOS_PENDING_CLIPBOARD.lock().unwrap() = Some(text);
+}
+
+/// Take the pending clipboard text, leaving nothing behind.
+#[cfg(target_env = "ohos")]
+pub fn ohos_take_pending_clipboard() -> Option<String> {
+    OHOS_PENDING_CLIPBOARD.lock().unwrap().take()
+}
+
+/// Send this device's clipboard text to every session.
+///
+/// Builds the same message the desktop and Android paths build: a `MultiClipboards` with one
+/// `Text` entry, compressed only when compressing actually makes it smaller. Reports whether
+/// there was a session to send to, so the caller can tell "no session" from "sent".
+#[cfg(target_env = "ohos")]
+pub fn ohos_send_clipboard(text: String) -> bool {
+    // The message types come from base::message_proto, already glob-imported at the top of this
+    // file; only the generated setter trait needs naming here.
+    use hbb_common::protobuf::Message as _;
+
+    if text.is_empty() {
+        return false;
+    }
+    let has_session = sessions::get_sessions().iter().any(|s| s.is_default());
+    if !has_session {
+        return false;
+    }
+
+    let compressed = hbb_common::compress::compress(text.as_bytes());
+    let (content, compress) = if compressed.len() < text.len() {
+        (compressed, true)
+    } else {
+        (text.into_bytes(), false)
+    };
+    let mut mcb = MultiClipboards::new();
+    mcb.clipboards.push(Clipboard {
+        compress,
+        content: content.into(),
+        format: ClipboardFormat::Text.into(),
+        ..Default::default()
+    });
+    let mut msg = Message::new();
+    msg.set_multi_clipboards(mcb);
+    send_clipboard_msg(msg, false);
+    true
+}
+
 #[cfg(not(target_os = "ios"))]
 pub fn update_text_clipboard_required() {
     let is_required = sessions::get_sessions()

@@ -2346,6 +2346,31 @@ pub fn session_get_display_size(session_id: SessionID, display: usize) -> String
     serde_json::json!({ "width": width, "height": height }).to_string()
 }
 
+/// Text the peer put on its clipboard, or empty when there is nothing new.
+///
+/// Taken rather than read: the caller is expected to write it to the pasteboard, and handing the
+/// same value out again would keep re-applying a clipboard the user may since have replaced.
+#[cfg(target_env = "ohos")]
+pub fn clipboard_take_pending() -> String {
+    super::flutter::ohos_take_pending_clipboard().unwrap_or_default()
+}
+
+/// Send this device's clipboard text to the peer.
+///
+/// Empty string on success, otherwise why it could not be sent -- normally that there is no
+/// session, which the caller should not present as an error.
+#[cfg(target_env = "ohos")]
+pub fn clipboard_send(text: String) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+    if super::flutter::ohos_send_clipboard(text) {
+        String::new()
+    } else {
+        "no session to send the clipboard to".to_owned()
+    }
+}
+
 pub fn session_register_pixelbuffer_texture(
     session_id: SessionID,
     display: usize,

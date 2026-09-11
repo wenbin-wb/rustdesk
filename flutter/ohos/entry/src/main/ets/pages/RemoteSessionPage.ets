@@ -1,5 +1,6 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { VideoSurface } from '../components/VideoSurface';
+import { ClipboardSync } from '../platform/ClipboardSync';
 import {
   sessionAdd, sessionStart, sessionClose, pollUiEvents,
   getConnectStatus, getLastRemoteId, peerGetSessionsCount
@@ -56,6 +57,9 @@ export struct RemoteSessionPage {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+    // Stop clipboard sync before closing the session: it pushes at whatever sessions exist, so
+    // leaving it running would have it keep pushing this device's copies at a peer that is gone.
+    ClipboardSync.getInstance().stop();
     // Release in the same order the session was built: stop the picture, then the session, then
     // forget the id so a later connect on the same peer starts clean.
     if (this.sessionId.length > 0) {
@@ -111,6 +115,9 @@ export struct RemoteSessionPage {
       }
       this.started = true;
       this.status = '正在连接…';
+      // Clipboard sync follows the session's life: it needs a session to send to, and a sync
+      // running without one would silently do nothing.
+      ClipboardSync.getInstance().start();
       hilog.info(DOMAIN, TAG, 'session %{public}s started', this.sessionId);
     } catch (e) {
       this.fail(`连接失败：${JSON.stringify(e)}`);

@@ -103,6 +103,11 @@ export const sessionInputKey: (
 ) => void;
 export const sessionInputString: (sessionId: string, value: string) => void;
 
+// Clipboard. ArkTS owns the system pasteboard, so text crosses in both directions instead of the
+// core applying it -- the core's clipboard module is excluded for HarmonyOS, as for iOS.
+export const clipboardTakePending: () => string;
+export const clipboardSend: (text: string) => string;
+
 // Rendering
 export const getNextTextureKey: () => number;
 

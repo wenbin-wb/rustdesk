@@ -99,6 +99,8 @@ interface RustDeskNative {
     alt: boolean, ctrl: boolean, shift: boolean, command: boolean
   ): void;
   sessionInputString(sessionId: string, value: string): void;
+  clipboardTakePending(): string;
+  clipboardSend(text: string): string;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -326,6 +328,27 @@ export function inputKey(sessionId: string, name: string, down: boolean, press: 
 /** Send a run of typed text, which does not depend on the peer's keyboard layout. */
 export function inputString(sessionId: string, value: string): void {
   native.sessionInputString(sessionId, value);
+}
+
+// --- clipboard ----------------------------------------------------------------
+
+/**
+ * Take clipboard text the peer has sent, or an empty string when there is nothing new.
+ *
+ * Taken rather than read: the caller writes it to the pasteboard, and getting the same value
+ * again would keep re-applying a clipboard the user may since have replaced.
+ */
+export function clipboardTakePending(): string {
+  return native.clipboardTakePending();
+}
+
+/**
+ * Send this device's clipboard text to the peer.
+ *
+ * Empty string on success. The usual failure is having no session, which is not worth showing.
+ */
+export function clipboardSend(text: string): string {
+  return native.clipboardSend(text);
 }
 
 /** Whether the given session is currently being recorded. */
