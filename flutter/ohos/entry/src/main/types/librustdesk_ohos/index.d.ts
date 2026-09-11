@@ -65,6 +65,14 @@ export const mainGetPeerOption: (id: string, key: string) => string;
 export const mainSetPeerOption: (id: string, key: string, value: string) => void;
 export const isDisableAb: () => boolean;
 export const isDisableAccount: () => boolean;
+/**
+ * Ask the server which of these peers are online.
+ *
+ * The answer is not returned here: it is a query against the rendezvous server and arrives as an
+ * event on the queue pollUiEvents drains, named `callback_query_onlines` with `onlines` and
+ * `offlines` as comma-separated id lists.
+ */
+export const queryOnlines: (ids: string[]) => void;
 
 // Core lifecycle. Must run before any other call: until it does, the core has no directory
 // to write to, so the device id is regenerated each launch and nothing is persisted.

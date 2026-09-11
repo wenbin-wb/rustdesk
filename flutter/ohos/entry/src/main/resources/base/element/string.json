@@ -101,6 +101,21 @@
     { "name": "ab_empty", "value": "地址簿为空" },
     { "name": "ab_empty_hint", "value": "在 RustDesk 客户端或网页端添加设备后会显示在这里" },
     { "name": "ab_no_match", "value": "没有匹配的设备" },
-    { "name": "ab_no_match_hint", "value": "试试其他名称或设备 ID" }
+    { "name": "ab_no_match_hint", "value": "试试其他名称或设备 ID" },
+    { "name": "peer_actions", "value": "更多操作" },
+    { "name": "peer_rename", "value": "重命名" },
+    { "name": "peer_rename_hint", "value": "输入新名称" },
+    { "name": "peer_note", "value": "备注" },
+    { "name": "peer_note_hint", "value": "为这台设备写点备注" },
+    { "name": "peer_remove", "value": "移除" },
+    { "name": "peer_online", "value": "在线" },
+    { "name": "peer_offline", "value": "离线" },
+    { "name": "peer_saved", "value": "已保存" },
+    { "name": "peer_save_failed", "value": "保存失败" },
+    { "name": "peer_remove_confirm", "value": "确定移除这台设备？" },
+    { "name": "ab_search_hint", "value": "搜索设备" },
+    { "name": "ab_tab_book", "value": "地址簿" },
+    { "name": "ab_tab_fav", "value": "收藏" },
+    { "name": "ab_tab_recent", "value": "最近" }
   ]
 }

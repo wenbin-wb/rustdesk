@@ -1,35 +1,30 @@
-import { HdsListItemCard } from '@kit.UIDesignKit';
 import { ChipGroup, ChipGroupItemOptions, promptAction } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
-  loadAddressBook, loadFavouritePeerIds, loadStoredPeers, AddressBook, AbEntry, AbPeer,
-  StoredPeerInfo
+  loadAddressBook, loadFavouritePeerIds, loadStoredPeers, queryOnlines, pollUiEvents,
+  peerHasPassword, AddressBook, AbPeer, StoredPeerInfo
 } from '../platform/RustDeskBridge';
+import { PeerTextDialog, applyAlias, readNote, writeNote } from './PeerTextDialog';
 
 const DOMAIN = 0x0000;
 const TAG = 'RustDeskAddressBook';
 
-/**
- * The address book, favourites and recent devices.
- *
- * All three come from the core, which is where the account syncs into and where every alias,
- * remembered password and favourite is stored. Nothing here keeps its own copy: a second list in
- * the front end would be a second answer to "which devices do I have", and the two would drift.
- *
- * Built from the platform's own components rather than from layout primitives -- `ChipGroup` for
- * the sub-tabs, `List`/`ListItemGroup` for the list so it gets the platform's scrolling, sticky
- * headers and recycling, `Search` for filtering, and the system toast for feedback. Hand-rolled
- * equivalents of these are what the earlier revision used, and they behaved subtly differently
- * from every other list on the device.
- */
+/** How often the server is asked which peers are online. */
+const ONLINE_POLL_MS = 15000;
+/** How often the queue is checked for the answer. Much shorter, since the answer is prompt. */
+const EVENT_POLL_MS = 500;
 
 /** One device, flattened from whichever source it came from. */
 interface PeerRow {
   id: string;
   /** The line to show: an alias if the user set one, else the device name, else the id. */
   title: string;
-  /** The supporting line: the id, plus the platform when known. */
-  subtitle: string;
+  /** The device name, shown under the title when the title is an alias. */
+  hostname: string;
+  /** The peer's platform, for the icon. */
+  platform: string;
+  /** Whether a password is held for this device. */
+  hasPassword: boolean;
 }
 
 /** One address book, and the devices in it. */
@@ -38,19 +33,22 @@ interface PeerGroup {
   peers: PeerRow[];
 }
 
-/** The three views, in the order the sub-tabs present them. */
 const TAB_ADDRESS_BOOK = 0;
 const TAB_FAVOURITES = 1;
 const TAB_RECENT = 2;
 
+/**
+ * The address book, favourites and recent devices.
+ *
+ * All three are read from the core, which is where the account syncs into and where every alias,
+ * note, remembered password and favourite lives.
+ *
+ * A row carries what the original client's card carries, because those are what a user picks a
+ * device by: an icon for the platform, the device's name -- the user's own name for it when they
+ * have set one -- its id, and whether it is reachable right now.
+ */
 @Component
 export struct AddressBookTab {
-  /**
-   * Bumped by the page when the account syncs or a peer changes.
-   *
-   * This tab is built once and kept alive inside its TabContent, so without being told it would
-   * keep rendering whatever it read the first time.
-   */
   @Prop @Watch('onRevisionChanged') peersRevision: number = 0;
 
   onConnect: (targetId: string) => void = () => {};
@@ -61,9 +59,42 @@ export struct AddressBookTab {
   @State private subTab: number = TAB_ADDRESS_BOOK;
   @State private query: string = '';
   @State private signedIn: boolean = false;
+  /**
+   * Which devices the server reported as online.
+   *
+   * Keyed by id rather than stored on the rows, because the answer arrives separately from the
+   * lists, and writing a flag into every row would rebuild the whole list on each poll.
+   */
+  @State private online: Record<string, boolean> = {};
+
+  private onlineTimerId: number = -1;
+  private eventTimerId: number = -1;
+  private editDialog: CustomDialogController | null = null;
+  @State private editTitle: string = '';
+  @State private editInitial: string = '';
+  @State private editHint: string = '';
+  private editTargetId: string = '';
+  private editIsNote: boolean = false;
 
   aboutToAppear(): void {
     this.reload();
+    this.eventTimerId = setInterval(() => {
+      this.drainEvents();
+    }, EVENT_POLL_MS);
+    this.onlineTimerId = setInterval(() => {
+      this.askWhoIsOnline();
+    }, ONLINE_POLL_MS);
+  }
+
+  aboutToDisappear(): void {
+    if (this.onlineTimerId !== -1) {
+      clearInterval(this.onlineTimerId);
+      this.onlineTimerId = -1;
+    }
+    if (this.eventTimerId !== -1) {
+      clearInterval(this.eventTimerId);
+      this.eventTimerId = -1;
+    }
   }
 
   onRevisionChanged(): void {
@@ -71,11 +102,11 @@ export struct AddressBookTab {
   }
 
   /**
-   * Read all three lists.
+   * Read all three lists, then ask who is online.
    *
-   * Each source is read in its own guarded step. They are separate calls into the core and any of
+   * Each source is read in its own guarded step: they are separate calls into the core and any of
    * them can fail on its own, so one failing must not cost the other two -- and the log has to say
-   * which one, or a failure here is a blank list with no lead.
+   * which one.
    */
   private reload(): void {
     try {
@@ -95,13 +126,87 @@ export struct AddressBookTab {
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'recent peers unreadable: %{public}s', messageOf(e));
     }
+    this.askWhoIsOnline();
   }
 
-  /** The rows for whichever sub-tab is showing, filtered by the search box. */
+  /**
+   * Ask the server which of the listed devices are online.
+   *
+   * Nothing comes back from the call, so the answer is picked up in {@link drainEvents}. Asking
+   * about only the ids on screen keeps the query small, and asking about none would be a wasted
+   * round trip.
+   */
+  private askWhoIsOnline(): void {
+    try {
+      const ids = this.allIds();
+      if (ids.length > 0) {
+        queryOnlines(ids);
+      }
+    } catch (e) {
+      // Presence is best effort: the list is usable without it, and an error here would be noise
+      // on a device that is simply offline.
+      hilog.debug(DOMAIN, TAG, 'online query skipped: %{public}s', messageOf(e));
+    }
+  }
+
+  /** Every id currently listed, across all three sources, without duplicates. */
+  private allIds(): string[] {
+    const seen: Record<string, boolean> = {};
+    const out: string[] = [];
+    const add = (rows: PeerRow[]): void => {
+      for (const row of rows) {
+        if (row.id.length > 0 && !seen[row.id]) {
+          seen[row.id] = true;
+          out.push(row.id);
+        }
+      }
+    };
+    for (const group of this.groups) {
+      add(group.peers);
+    }
+    add(this.favourites);
+    add(this.recent);
+    return out;
+  }
+
+  /**
+   * Read the core's queued events and apply the presence answer.
+   *
+   * The queue is shared with the remote-session page, which is why everything unrecognised is left
+   * alone rather than discarded. The two screens are never on display at once, so neither can take
+   * an event the other needed.
+   */
+  private drainEvents(): void {
+    let events: string[] = [];
+    try {
+      events = pollUiEvents();
+    } catch (e) {
+      return;
+    }
+    for (const event of events) {
+      if (event.indexOf('callback_query_onlines') < 0) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(event) as OnlineEvent;
+        // Rebuilt rather than merged, so a device that has gone offline since the last answer is
+        // cleared instead of keeping its old state.
+        const next: Record<string, boolean> = {};
+        for (const id of splitIds(parsed.onlines)) {
+          next[id] = true;
+        }
+        for (const id of splitIds(parsed.offlines)) {
+          next[id] = false;
+        }
+        this.online = next;
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'could not read presence: %{public}s', messageOf(e));
+      }
+    }
+  }
+
   private visibleGroups(): PeerGroup[] {
     const wanted = this.query.trim().toLowerCase();
-    // Built as statements rather than a nested ternary: ArkTS cannot infer a type for an array of
-    // object literals, so the shape has to be declared before it is filled.
     let source: PeerGroup[];
     if (this.subTab === TAB_FAVOURITES) {
       source = [{ name: '', peers: this.favourites } as PeerGroup];
@@ -117,9 +222,11 @@ export struct AddressBookTab {
     for (const group of source) {
       const matched: PeerRow[] = [];
       for (const peer of group.peers) {
-        // Matching the id as well as the title, because a user often has the id in hand rather
-        // than the name.
-        if (peer.title.toLowerCase().includes(wanted) || peer.id.includes(wanted)) {
+        // The device name and the account's own name for it are both worth matching, because a
+        // user may have either in mind.
+        if (peer.title.toLowerCase().includes(wanted) ||
+            peer.hostname.toLowerCase().includes(wanted) ||
+            peer.id.includes(wanted)) {
           matched.push(peer);
         }
       }
@@ -134,16 +241,80 @@ export struct AddressBookTab {
     return this.groups.length > 0 || this.favourites.length > 0 || this.recent.length > 0;
   }
 
+  // --- dialogs ----------------------------------------------------------------
+
+  private openRename(peer: PeerRow): void {
+    this.editIsNote = false;
+    this.editTargetId = peer.id;
+    this.editTitle = '重命名';
+    this.editInitial = peer.title;
+    this.editHint = '输入新名称';
+    this.showEditDialog();
+  }
+
+  private openNote(peer: PeerRow): void {
+    this.editIsNote = true;
+    this.editTargetId = peer.id;
+    this.editTitle = '备注';
+    this.editInitial = '';
+    this.editHint = '为这台设备写点备注';
+    try {
+      this.editInitial = readNote(peer.id);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'could not read the note: %{public}s', messageOf(e));
+    }
+    this.showEditDialog();
+  }
+
+  /**
+   * Open the edit dialog.
+   *
+   * The controller is rebuilt for each open so it captures the peer being edited; one long-lived
+   * controller would keep whichever peer it was first given.
+   */
+  private showEditDialog(): void {
+    this.editDialog = new CustomDialogController({
+      builder: PeerTextDialog({
+        title: this.editTitle,
+        initial: this.editInitial,
+        hint: this.editHint,
+        onSubmit: (value: string) => {
+          this.saveEdit(value);
+        }
+      }),
+      // Without this the framework wraps the content in its own opaque container, which shows as
+      // a white rim around the dialog.
+      customStyle: true,
+      autoCancel: true,
+      alignment: DialogAlignment.Center
+    });
+    this.editDialog.open();
+  }
+
+  private saveEdit(value: string): void {
+    try {
+      if (this.editIsNote) {
+        writeNote(this.editTargetId, value);
+      } else {
+        applyAlias(this.editTargetId, value);
+      }
+      promptAction.showToast({ message: '已保存' });
+      this.reload();
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'could not save: %{public}s', messageOf(e));
+      promptAction.showToast({ message: '保存失败' });
+    }
+  }
+
+  // --- view -------------------------------------------------------------------
+
   build() {
     Column({ space: 12 }) {
       this.buildSubTabs()
       this.buildSearch()
 
       if (!this.hasAnyPeer() && !this.signedIn) {
-        this.buildEmptyState(
-          $r('app.string.ab_signed_out'),
-          $r('app.string.ab_signed_out_hint')
-        )
+        this.buildEmptyState($r('app.string.ab_signed_out'), $r('app.string.ab_signed_out_hint'))
       } else if (this.visibleGroups().length === 0) {
         this.buildEmptyState(
           this.query.length > 0 ? $r('app.string.ab_no_match') : $r('app.string.ab_empty'),
@@ -154,9 +325,9 @@ export struct AddressBookTab {
       }
     }
     .width('100%')
+    .height('100%')
   }
 
-  /** The sub-tabs, using the platform's chip group rather than hand-styled text. */
   @Builder
   private buildSubTabs() {
     ChipGroup({
@@ -191,12 +362,13 @@ export struct AddressBookTab {
   /**
    * The list, one group per address book.
    *
-   * `ListItemGroup` is what gives the book headings: without it every device would be one flat
-   * run, and a user with several books could not tell which device belongs where.
+   * `ListItemGroup` gives the book headings. The spacing is generous on purpose: a row carries an
+   * icon, two lines of text, a status dot and a menu, and packing them together makes the whole
+   * list read as one block instead of as separate devices.
    */
   @Builder
   private buildList() {
-    List({ space: 8 }) {
+    List({ space: 10 }) {
       ForEach(this.visibleGroups(), (group: PeerGroup) => {
         ListItemGroup({ header: this.buildGroupHeader(group.name) }) {
           ForEach(group.peers, (peer: PeerRow) => {
@@ -210,34 +382,123 @@ export struct AddressBookTab {
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    // The card look comes from the rows, so the list background stays clear and the rows read as
+    // separate objects rather than as one sheet.
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
   private buildGroupHeader(name: string) {
-    // A single-book list does not need a heading saying which book it is; the sub-tab already
-    // says that, and a heading above a lone group is noise.
+    // A single-book list does not need a heading saying which book it is; the sub-tab already says
+    // that, and a heading above a lone group is noise.
     if (name.length === 0 || this.visibleGroups().length < 2) {
-      Row().height(0)
+      Row().height(4)
     } else {
       Text(name)
         .fontSize($r('app.float.font_caption'))
         .fontColor($r('app.color.text_secondary'))
-        .padding({ left: 4, top: 10, bottom: 6 })
+        .padding({ left: 4, top: 10, bottom: 4 })
     }
   }
 
+  /**
+   * One device.
+   *
+   * The icon identifies the platform at a glance, which is how the original client lets a user
+   * pick between several machines without reading every name. The dot is the presence the server
+   * reported and sits at the end of the row: it changes on its own, and putting it beside the name
+   * would shift the text every time a device came online.
+   */
   @Builder
   private buildRow(peer: PeerRow) {
-    HdsListItemCard({
-      textItem: {
-        primaryText: { text: peer.title },
-        secondaryText: { text: peer.subtitle }
-      },
-      onClick: () => {
-        this.onConnect(peer.id);
+    Row({ space: 12 }) {
+      Image(platformIcon(peer.platform))
+        .width(34)
+        .height(34)
+        .objectFit(ImageFit.Contain)
+        .fillColor($r('app.color.text_secondary'))
+        .flexShrink(0)
+
+      Column({ space: 3 }) {
+        Row({ space: 6 }) {
+          Text(peer.title)
+            .fontSize($r('app.float.font_body'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_title'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          if (peer.hasPassword) {
+            // The original marks devices it holds a password for, so a user can tell which will
+            // connect without being asked.
+            SymbolGlyph($r('sys.symbol.key'))
+              .fontSize(14)
+              .fontColor([$r('app.color.text_hint')])
+          }
+        }
+        .width('100%')
+
+        Text(peer.hostname.length > 0 && peer.hostname !== peer.title
+          ? `${peer.hostname} · ${peer.id}`
+          : peer.id)
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_hint'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
       }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Circle()
+        .width(8)
+        .height(8)
+        .fill(this.online[peer.id] === true
+          ? $r('app.color.status_online')
+          : $r('app.color.text_hint'))
+        .flexShrink(0)
+
+      // The row's own tap connects, so the menu is the only other action and stays a small target
+      // at the end where it cannot be hit while reaching for the row.
+      Text('⋮')
+        .fontSize(20)
+        .fontColor($r('app.color.text_secondary'))
+        .padding({ left: 6, right: 2 })
+        .bindMenu(this.peerMenu(peer))
+        .flexShrink(0)
+    }
+    .width('100%')
+    .padding({ left: 14, right: 10, top: 12, bottom: 12 })
+    .backgroundColor($r('app.color.bg_card'))
+    .borderRadius($r('app.float.radius_control'))
+    .onClick(() => {
+      this.onConnect(peer.id);
     })
-      .width('100%')
+  }
+
+  /** The per-device actions, as a menu rather than a row of buttons. */
+  private peerMenu(peer: PeerRow): MenuElement[] {
+    return [
+      {
+        value: '重命名',
+        action: () => {
+          this.openRename(peer);
+        }
+      },
+      {
+        value: '备注',
+        action: () => {
+          this.openNote(peer);
+        }
+      },
+      {
+        value: '连接',
+        action: () => {
+          this.onConnect(peer.id);
+        }
+      }
+    ];
   }
 
   @Builder
@@ -259,17 +520,22 @@ export struct AddressBookTab {
   }
 }
 
+/** The presence event the core queues. */
+interface OnlineEvent {
+  name?: string;
+  /** Ids that are online, comma separated. */
+  onlines?: string;
+  /** Ids that are not, comma separated. */
+  offlines?: string;
+}
+
 // --- shaping ------------------------------------------------------------------
-//
-// The three sources have different shapes and the list wants one, so the conversion happens here
-// rather than inside the builders -- a builder runs on every frame of a scroll, and reshaping
-// there would redo the same work continually.
 
 /**
  * A description of a thrown value.
  *
  * Not JSON.stringify: an Error's message and stack are not enumerable, so stringifying one yields
- * "{}" -- which is exactly how a real failure here was logged as nothing at all.
+ * "{}" -- which is how a real failure here was once logged as nothing at all.
  */
 function messageOf(e: Object): string {
   if (e instanceof Error) {
@@ -277,6 +543,35 @@ function messageOf(e: Object): string {
   }
   const text = String(e);
   return text.length > 0 ? text : 'unknown error';
+}
+
+/** Split a comma-separated id list, dropping empties. */
+function splitIds(csv: string | undefined): string[] {
+  if (!csv) {
+    return [];
+  }
+  const out: string[] = [];
+  for (const part of csv.split(',')) {
+    const id = part.trim();
+    if (id.length > 0) {
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+/** The icon for a platform. An unknown platform still gets one, so the rows stay aligned. */
+function platformIcon(platform: string): Resource {
+  if (platform === 'Windows') {
+    return $r('app.media.platform_win');
+  }
+  if (platform === 'Mac OS') {
+    return $r('app.media.platform_mac');
+  }
+  if (platform === 'Android') {
+    return $r('app.media.platform_android');
+  }
+  return $r('app.media.platform_linux');
 }
 
 /** The address book, one group per book, skipping empty books. */
@@ -307,12 +602,19 @@ function rowOf(peer: AbPeer): PeerRow {
   const id = peer.id ?? '';
   const alias = peer.alias ?? '';
   const hostname = peer.hostname ?? '';
-  const platform = peer.platform ?? '';
-  const title = alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id);
-  // The platform is worth showing only when it is known; an empty separator would be worse than
-  // nothing.
-  const subtitle = platform.length > 0 ? `${id} · ${platform}` : id;
-  return { id: id, title: title, subtitle: subtitle };
+  let hasPassword = false;
+  try {
+    hasPassword = peerHasPassword(id);
+  } catch (e) {
+    hasPassword = false;
+  }
+  return {
+    id: id,
+    title: alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id),
+    hostname: hostname,
+    platform: peer.platform ?? '',
+    hasPassword: hasPassword
+  };
 }
 
 /** The favourited devices, taken from the address book by id. */
@@ -340,7 +642,9 @@ function favouritesOf(): PeerRow[] {
     // A favourite can outlive its address-book entry -- the device may have been removed from the
     // account but not from this device's favourites -- so a missing one still gets a row rather
     // than being dropped silently.
-    rows.push(found ? rowOf(found) : { id: id, title: id, subtitle: id });
+    rows.push(found ? rowOf(found) : {
+      id: id, title: id, hostname: '', platform: '', hasPassword: false
+    });
   }
   return rows;
 }
@@ -356,12 +660,18 @@ function recentOf(): PeerRow[] {
     }
     const alias = peer.alias ?? '';
     const hostname = peer.hostname ?? '';
-    const platform = peer.platform ?? '';
-    const title = alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id);
+    let hasPassword = false;
+    try {
+      hasPassword = peerHasPassword(id);
+    } catch (e) {
+      hasPassword = false;
+    }
     rows.push({
       id: id,
-      title: title,
-      subtitle: platform.length > 0 ? `${id} · ${platform}` : id
+      title: alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id),
+      hostname: hostname,
+      platform: peer.platform ?? '',
+      hasPassword: hasPassword
     });
   }
   return rows;

@@ -830,6 +830,17 @@ pub fn main_get_peer_option(id: String, key: String) -> String {
     librustdesk::flutter_ffi::main_get_peer_option(id, key)
 }
 
+/// Ask the server which of these peers are online.
+///
+/// The answer does not come back from this call: it is a query against the rendezvous server, so
+/// it arrives as an event on the queue the front end already polls, named
+/// `callback_query_onlines` with `onlines` and `offlines` as comma-separated id lists. The Flutter
+/// client receives the same payload through its global event stream.
+#[napi(js_name = "queryOnlines")]
+pub fn query_onlines(ids: Vec<String>) {
+    librustdesk::flutter_ffi::query_onlines(ids)
+}
+
 /// Set a per-peer option.
 #[napi(js_name = "mainSetPeerOption")]
 pub fn main_set_peer_option(id: String, key: String, value: String) {

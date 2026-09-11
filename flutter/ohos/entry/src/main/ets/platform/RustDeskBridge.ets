@@ -78,6 +78,7 @@ interface RustDeskNative {
   mainSetPeerOption(id: string, key: string, value: string): void;
   isDisableAb(): boolean;
   isDisableAccount(): boolean;
+  queryOnlines(ids: string[]): void;
   mainSetHomeDir(home: string): void;
   mainDeviceId(id: string): void;
   mainDeviceName(name: string): void;
@@ -423,6 +424,17 @@ export function getPeerOption(id: string, key: string): string {
 /** Set a per-peer option. */
 export function setPeerOption(id: string, key: string, value: string): void {
   native.mainSetPeerOption(id, key, value);
+}
+/**
+ * Ask the server which of these peers are online.
+ *
+ * Nothing comes back from this call: it is a query against the rendezvous server, so the answer
+ * arrives as an event on the queue {@link pollUiEvents} drains, named `callback_query_onlines`
+ * with `onlines` and `offlines` as comma-separated id lists. The Flutter client receives the same
+ * payload through its global event stream.
+ */
+export function queryOnlines(ids: string[]): void {
+  native.queryOnlines(ids);
 }
 
 /**

@@ -101,6 +101,21 @@
     { "name": "ab_empty", "value": "The address book is empty" },
     { "name": "ab_empty_hint", "value": "Devices added from another RustDesk client will appear here" },
     { "name": "ab_no_match", "value": "No matching devices" },
-    { "name": "ab_no_match_hint", "value": "Try a different name or device ID" }
+    { "name": "ab_no_match_hint", "value": "Try a different name or device ID" },
+    { "name": "peer_actions", "value": "More actions" },
+    { "name": "peer_rename", "value": "Rename" },
+    { "name": "peer_rename_hint", "value": "Enter a new name" },
+    { "name": "peer_note", "value": "Note" },
+    { "name": "peer_note_hint", "value": "Write a note about this device" },
+    { "name": "peer_remove", "value": "Remove" },
+    { "name": "peer_online", "value": "Online" },
+    { "name": "peer_offline", "value": "Offline" },
+    { "name": "peer_saved", "value": "Saved" },
+    { "name": "peer_save_failed", "value": "Could not save" },
+    { "name": "peer_remove_confirm", "value": "Remove this device?" },
+    { "name": "ab_search_hint", "value": "Search devices" },
+    { "name": "ab_tab_book", "value": "Address book" },
+    { "name": "ab_tab_fav", "value": "Favourites" },
+    { "name": "ab_tab_recent", "value": "Recent" }
   ]
 }

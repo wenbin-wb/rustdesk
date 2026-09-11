@@ -2633,9 +2633,16 @@ pub(super) mod async_tasks {
             ("onlines", onlines.join(",")),
             ("offlines", offlines.join(",")),
         ]);
-        let _res = super::push_global_event(
-            super::APP_TYPE_MAIN,
-            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        let json = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
+        let _res = super::push_global_event(super::APP_TYPE_MAIN, json.clone());
+        // HarmonyOS has no global event stream, so the same payload also goes onto the UI event
+        // queue the front end already polls. Additive rather than a replacement: the Flutter path
+        // above is untouched, and this is what lets a peer list show which devices are online.
+        // Fully qualified because this module imports neither name.
+        #[cfg(target_env = "ohos")]
+        crate::flutter::push_ui_event(
+            &None,
+            crate::flutter_ffi::EventToUI::Event(json),
         );
     }
 }
