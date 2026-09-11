@@ -28,5 +28,10 @@ napi-derive-ohos = "1"
 # the same major the workspace uses so the type unifies rather than duplicating.
 uuid = { version = "1", features = ["v4"] }
 
+# The surface renderer keeps one global render target and one running flag; the core meanwhile
+# logs through log. Both are already in the workspace graph, so this adds no new resolution.
+lazy_static = "1"
+log = "0.4"
+
 [build-dependencies]
 napi-build-ohos = "1"

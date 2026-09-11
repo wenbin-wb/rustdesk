@@ -34,6 +34,8 @@ extern crate napi_derive_ohos;
 
 use napi_ohos::bindgen_prelude::Buffer;
 
+mod surface;
+
 /// Surface core functions through the bridge unchanged.
 ///
 /// The core's exports keep their `flutter_ffi` names, and the `js_name` attribute maps
@@ -447,4 +449,44 @@ pub fn session_release_rgba(session_id: String, display: u32) {
 #[napi(js_name = "pollUiEvents")]
 pub fn poll_ui_events() -> String {
     librustdesk::flutter_ffi::ohos_poll_ui_events()
+}
+
+// --- video surface ------------------------------------------------------------
+//
+// ArkUI's XComponent hands out a surface, and the frames go straight into it from Rust. Nothing
+// crosses this boundary per frame -- see src/surface.rs for why.
+
+/// Bind the surface an XComponent created. Empty string on success, or the failure message.
+///
+/// `surfaceId` is the decimal string from `XComponentController.getXComponentSurfaceId()`.
+#[napi(js_name = "videoSurfaceAttach")]
+pub fn video_surface_attach(surface_id: String) -> String {
+    surface::attach(&surface_id)
+}
+
+/// Render the session's display into the attached surface until stopped.
+///
+/// Empty string on success. Frames are not returned to ArkTS: the render loop lives in Rust so
+/// that a frame is written straight into the surface buffer rather than copied out and back.
+#[napi(js_name = "videoStart")]
+pub fn video_start(session_id: String, display: u32) -> String {
+    surface::start(session_id, display as usize)
+}
+
+/// Stop rendering. The render thread exits on its next poll.
+#[napi(js_name = "videoStop")]
+pub fn video_stop() {
+    surface::stop()
+}
+
+/// Release the surface and stop rendering. Call when the XComponent goes away.
+#[napi(js_name = "videoSurfaceDetach")]
+pub fn video_surface_detach() {
+    surface::detach()
+}
+
+/// Whether a surface is currently bound.
+#[napi(js_name = "videoIsAttached")]
+pub fn video_is_attached() -> bool {
+    surface::is_attached()
 }

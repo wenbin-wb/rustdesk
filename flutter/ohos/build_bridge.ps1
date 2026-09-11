@@ -111,6 +111,9 @@ $systemLibs = @(
   'libace_napi.z.so', 'libace_compatible.z.so', 'libhilog.so', 'libhitrace.so',
   'libnative_window.so', 'libnative_vsync.so', 'libnative_buffer.so',
   'libnative_image.so', 'libpixelmap.so', 'libimage_source.so',
+  # The surface renderer draws into an XComponent surface through the native window API, so the
+  # module depends on this the same way it depends on libace_napi.
+  'libnative_window_manager.so', 'libnative_window_buffer.so', 'libnative_media_core.so',
   'libjnigraphics.so', 'libEGL.so', 'libGLESv3.so', 'libvulkan.so',
   'libhidumper.so', 'libparameter.so', 'libbegetutil.so'
 )
@@ -131,5 +134,75 @@ if (Test-Path $readelf) {
     Write-Host "Bundle it into $destDir, or link it statically." -ForegroundColor Red
     exit 1
   }
-  Write-Host "Dependencies OK: $($needed.Count) NEEDED, all satisfied" -ForegroundColor Green
+
+  # Undefined symbols that nothing actually provides.
+  #
+  # The NEEDED check above catches a library that was linked but cannot be found on device. It
+  # cannot catch the opposite mistake: symbols that were never linked to anything at all. A
+  # cdylib may carry undefined symbols, so the build and the install both succeed and the failure
+  # only appears at dlopen, where ArkTS reports it as the imported module being undefined. That
+  # has happened repeatedly here -- libsodium built for the wrong architecture, libssl.so never
+  # named, and the native window library missing because a build script tested the host with
+  # `#[cfg]` instead of reading CARGO_CFG_TARGET_ENV.
+  #
+  # An undefined symbol is not itself a problem: that is how dynamic linking works, and every
+  # symbol the module imports from libnative_window.so or libace_napi.z.so shows up this way. The
+  # question is whether some NEEDED library exports it. Those libraries are checked in the NDK
+  # sysroot -- anything the sysroot does not carry is left alone rather than guessed at, so a
+  # device-only library cannot produce a false alarm.
+  $resolverProvided = @(
+    # Satisfied by the runtime or the host process rather than by a named library.
+    'napi_', '__', '_Unwind', '_Z', 'abort', 'bcmp', 'mem', 'str', 'dl', 'environ',
+    'malloc', 'free', 'calloc', 'realloc', 'posix_memalign', 'pthread_',
+    'je_', '_exit', 'chdir', 'chroot', 'dup2', 'execvp', 'fchmod', 'fcntl', 'fork',
+    'lseek', 'mkdir', 'mmap', 'munmap', 'pause', 'pipe2', 'poll', 'puts', 'realpath',
+    'recv', 'recvmsg', 'rename', 'sendmsg', 'socketpair', 'stat', 'syscall', 'waitid',
+    'waitpid', 'close', 'open', 'read', 'write', 'ioctl', 'fstat', 'sched_', 'get',
+    'set', 'sig', 'sysconf', 'clock_', 'nanosleep', 'time', 'localtime', 'gmtime',
+    'strftime'
+  )
+
+  $sysrootLibDir = Join-Path $NdkLink "sysroot\usr\lib\aarch64-linux-ohos"
+  $exported = New-Object System.Collections.Generic.HashSet[string]
+  $unchecked = @()
+  foreach ($lib in $needed) {
+    $path = Join-Path $sysrootLibDir $lib
+    if (Test-Path $path) {
+      & $readelf --dyn-syms $path 2>$null |
+        Select-String -Pattern 'FUNC|OBJECT' |
+        ForEach-Object { if ($_.Line -match '([A-Za-z_][A-Za-z0-9_]*)\s*$') { [void]$exported.Add($Matches[1]) } }
+    } else {
+      $unchecked += $lib
+    }
+  }
+
+  $undefined = & $readelf --dyn-syms $dest 2>$null |
+    Select-String -Pattern '\bUND\b' |
+    # Weak undefined symbols are optional by construction: the caller must cope with them being
+    # absent, and the loader resolves them to null. zstd's ZSTD_trace_* hooks are the example --
+    # it fires them only if a tracing build provided them.
+    Where-Object { $_.Line -notmatch '\bWEAK\b' } |
+    ForEach-Object {
+      # The symbol is the last field. Entry 0 is the null symbol and has no name, so the line ends
+      # at the class column -- skip it rather than reading "UND" as a symbol.
+      if ($_.Line -match '([A-Za-z_][A-Za-z0-9_.]*)\s*$') { $Matches[1] }
+    } |
+    Where-Object { $_ -ne 'UND' } |
+    Sort-Object -Unique |
+    Where-Object {
+      $s = $_
+      -not $exported.Contains($s) -and
+      -not ($resolverProvided | Where-Object { $s.StartsWith($_) })
+    }
+
+  if ($undefined.Count -gt 0) {
+    Write-Host "UNDEFINED SYMBOLS -- no NEEDED library exports these:" -ForegroundColor Red
+    $undefined | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Write-Host "Name the owning library in the build script. Note a build script is compiled for" -ForegroundColor Red
+    Write-Host "the HOST, so decide with CARGO_CFG_TARGET_ENV, never a cfg test." -ForegroundColor Red
+    exit 1
+  }
+
+  $note = if ($unchecked.Count -gt 0) { " ($($unchecked.Count) NEEDED libs not in the sysroot, unchecked)" } else { "" }
+  Write-Host "Dependencies OK: $($needed.Count) NEEDED, $($exported.Count) resolvable symbols$note" -ForegroundColor Green
 }
