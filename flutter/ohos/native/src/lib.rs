@@ -730,3 +730,94 @@ pub fn session_set_confirm_override_file(
         );
     }
 }
+
+// --- peers and the address book -----------------------------------------------
+//
+// Read from the core rather than kept in ArkTS. The address book is the core's: it is what the
+// account syncs into, it is where an alias or a remembered password lives, and any of them changed
+// elsewhere in the app has to be visible here. A second copy in ArkTS would be a second truth.
+//
+// The book is stored under the application's own directory, which resolves correctly now that
+// Config::path handles this platform -- before that fix its writes went nowhere.
+
+/// The address book as JSON: `{access_token, ab_entries:[...]}`.
+///
+/// Empty string when there is none. The entries carry the peer id, its alias, the account's tags
+/// and the device's platform, so this is the whole book rather than just a list of ids.
+#[napi(js_name = "mainLoadAb")]
+pub fn main_load_ab() -> String {
+    librustdesk::flutter_ffi::main_load_ab()
+}
+
+/// Replace the stored address book.
+///
+/// The account's book is fetched over HTTP by the front end -- it holds the login and talks to the
+/// API server -- and then handed here, which is also how the desktop client does it. The core
+/// stores it so aliases, tags and remembered passwords survive a restart.
+#[napi(js_name = "mainSaveAb")]
+pub fn main_save_ab(json: String) {
+    librustdesk::flutter_ffi::main_save_ab(json)
+}
+
+/// Favourited peer ids, as a JSON array.
+///
+/// The core also has a `main_load_fav_peers`, but it returns nothing and pushes its answer onto
+/// Flutter's global event stream, which HarmonyOS has no channel for. This reads the same store
+/// and returns it, so the call fits the synchronous shape the rest of this bridge uses.
+#[napi(js_name = "mainLoadFavPeerIds")]
+pub fn main_load_fav_peer_ids() -> String {
+    serde_json::to_string(&librustdesk::flutter_ffi::main_get_fav()).unwrap_or_default()
+}
+
+/// Stored peers with their details, as a JSON array.
+///
+/// `filter` is a JSON array of peer ids to restrict the result to, or an empty array for all of
+/// them. That is also how the favourites list is built -- the same call with the favourite ids --
+/// rather than a separate code path. Each entry carries id, alias, username, hostname and
+/// platform.
+#[napi(js_name = "mainLoadPeers")]
+pub fn main_load_peers(filter: String) -> String {
+    librustdesk::flutter_ffi::main_load_recent_peers_for_ab(filter)
+}
+
+/// Set the local name for a peer.
+#[napi(js_name = "mainSetPeerAlias")]
+pub fn main_set_peer_alias(id: String, alias: String) {
+    librustdesk::flutter_ffi::main_set_peer_alias(id, alias)
+}
+
+/// Whether a peer is known to the core -- in the address book, favourited or recent.
+#[napi(js_name = "mainPeerExists")]
+pub fn main_peer_exists(id: String) -> bool {
+    librustdesk::flutter_ffi::main_peer_exists(id)
+}
+
+/// Whether a password is stored for a peer, so the UI can tell "connect" from "connect and ask".
+#[napi(js_name = "mainPeerHasPassword")]
+pub fn main_peer_has_password(id: String) -> bool {
+    librustdesk::flutter_ffi::main_peer_has_password(id)
+}
+
+/// A per-peer option. Keys are the core's, as with the global options.
+#[napi(js_name = "mainGetPeerOption")]
+pub fn main_get_peer_option(id: String, key: String) -> String {
+    librustdesk::flutter_ffi::main_get_peer_option(id, key)
+}
+
+/// Set a per-peer option.
+#[napi(js_name = "mainSetPeerOption")]
+pub fn main_set_peer_option(id: String, key: String, value: String) {
+    librustdesk::flutter_ffi::main_set_peer_option(id, key, value)
+}
+
+/// Whether the address book is disabled for this build or configuration.
+#[napi(js_name = "isDisableAb")]
+pub fn is_disable_ab() -> bool {
+    librustdesk::flutter_ffi::is_disable_ab().0
+}
+
+/// Whether accounts are disabled, in which case there is nothing to sign in to.
+#[napi(js_name = "isDisableAccount")]
+pub fn is_disable_account() -> bool {
+    librustdesk::flutter_ffi::is_disable_account().0
+}
