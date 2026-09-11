@@ -3625,10 +3625,16 @@ impl LoginConfigHandler {
             })
             .collect::<Vec<_>>()
             .join(" ");
-        #[cfg(not(target_os = "android"))]
+        // The name this device reports itself as to the peer. The fallback asks the platform,
+        // which answers "Linux" on HarmonyOS -- its Rust target keeps target_os = "linux" -- so
+        // the peer would list this client as a Linux desktop. Naming it is also what lets the
+        // peer pick the right defaults for a mobile client.
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         let my_platform = hbb_common::whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
+        #[cfg(target_env = "ohos")]
+        let my_platform = "HarmonyOS".into();
         let hwid = if self.get_option("trust-this-device") == "Y" {
             crate::get_hwid()
         } else {
