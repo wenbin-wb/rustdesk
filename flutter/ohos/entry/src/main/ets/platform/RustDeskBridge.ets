@@ -65,6 +65,19 @@ interface RustDeskNative {
   mainGetPeerSync(id: string): string;
   mainSetOption(key: string, value: string): void;
   mainSetOptions(json: string): void;
+  mainGetLocalOption(key: string): string;
+  mainSetLocalOption(key: string, value: string): void;
+  mainLoadAb(): string;
+  mainSaveAb(json: string): void;
+  mainLoadFavPeerIds(): string;
+  mainLoadPeers(filter: string): string;
+  mainSetPeerAlias(id: string, alias: string): void;
+  mainPeerExists(id: string): boolean;
+  mainPeerHasPassword(id: string): boolean;
+  mainGetPeerOption(id: string, key: string): string;
+  mainSetPeerOption(id: string, key: string, value: string): void;
+  isDisableAb(): boolean;
+  isDisableAccount(): boolean;
   mainSetHomeDir(home: string): void;
   mainDeviceId(id: string): void;
   mainDeviceName(name: string): void;
@@ -138,6 +151,17 @@ const native: RustDeskNative = nativeModule as RustDeskNative;
  */
 export function getMyId(): string {
   return native.mainGetMyId();
+}
+
+/**
+ * This device's hardware uuid.
+ *
+ * What the account server uses to tell one device from another, and what the sign-in request
+ * carries. Read from the core rather than generated, so the server keeps a single view of this
+ * device instead of seeing a new one on every launch.
+ */
+export function getUuid(): string {
+  return native.mainGetUuid();
 }
 
 /** The core's version, e.g. for an about panel. */
@@ -239,6 +263,152 @@ export function getOption(key: string): string {
  */
 export function setOption(key: string, value: string): void {
   native.mainSetOption(key, value);
+}
+
+// --- local options ------------------------------------------------------------
+
+/** Read a local option: this device's own settings, not the synchronised configuration. */
+export function getLocalOption(key: string): string {
+  return native.mainGetLocalOption(key);
+}
+
+/** Set a local option. */
+export function setLocalOption(key: string, value: string): void {
+  native.mainSetLocalOption(key, value);
+}
+
+/**
+ * The account token's key in the local options.
+ *
+ * Named here rather than repeated as a literal: the core and the desktop client look for the
+ * token under this exact key when they build an authenticated request, and a typo would look like
+ * "the account is signed in but every request is unauthorised".
+ */
+export const LOCAL_OPTION_ACCESS_TOKEN = 'access_token';
+
+// --- address book -------------------------------------------------------------
+
+/** One entry in the account's address book. */
+export interface AbPeer {
+  id: string;
+  username: string;
+  hostname: string;
+  alias: string;
+  platform: string;
+  tags: string[];
+  /** Whether this peer is favourited, as the core stores it. */
+  favorite?: boolean;
+}
+
+/** A stored peer as the core reports it. */
+export interface StoredPeerInfo {
+  id: string;
+  username: string;
+  hostname: string;
+  alias?: string;
+  platform?: string;
+}
+
+/** The address book as the core holds it. */
+export interface AddressBook {
+  access_token: string;
+  ab_entries: AbEntry[];
+}
+
+export interface AbEntry {
+  guid: string;
+  name: string;
+  tags: string[];
+  peers: AbPeer[];
+}
+
+/**
+ * The address book the core has stored.
+ *
+ * This is the account's book once it has been synced -- see {@link saveAddressBook}. Empty
+ * entries mean nothing has been synced yet, which is what a fresh install looks like.
+ */
+export function loadAddressBook(): AddressBook {
+  const raw = native.mainLoadAb();
+  if (!raw || raw.length === 0) {
+    return { access_token: '', ab_entries: [] };
+  }
+  try {
+    const parsed = JSON.parse(raw) as AddressBook;
+    if (!parsed.ab_entries) {
+      parsed.ab_entries = [];
+    }
+    return parsed;
+  } catch (e) {
+    return { access_token: '', ab_entries: [] };
+  }
+}
+
+/**
+ * Store the address book in the core.
+ *
+ * The front end fetches it over HTTP, because it holds the login and knows the API server; the
+ * core keeps it so aliases, tags and remembered passwords survive a restart. The desktop client
+ * does the same thing through the same call.
+ */
+export function saveAddressBook(book: AddressBook): void {
+  native.mainSaveAb(JSON.stringify(book));
+}
+
+/** Favourite peer ids. */
+export function loadFavouritePeerIds(): string[] {
+  const raw = native.mainLoadFavPeerIds();
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+  try {
+    return JSON.parse(raw) as string[];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Stored peers with their details.
+ *
+ * `ids` restricts the result; pass an empty array for all of them. Favourites are this same call
+ * with the favourite ids rather than a separate path.
+ */
+export function loadStoredPeers(ids: string[]): StoredPeerInfo[] {
+  const raw = native.mainLoadPeers(JSON.stringify(ids));
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+  try {
+    return JSON.parse(raw) as StoredPeerInfo[];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** Set the local name for a peer. */
+export function setPeerAlias(id: string, alias: string): void {
+  native.mainSetPeerAlias(id, alias);
+}
+
+/** Whether a peer is known to the core at all. */
+export function peerExists(id: string): boolean {
+  return native.mainPeerExists(id);
+}
+
+/** Whether a password is stored for a peer, so the UI can skip asking for one. */
+export function peerHasPassword(id: string): boolean {
+  return native.mainPeerHasPassword(id);
+}
+
+/** A per-peer option. */
+export function getPeerOption(id: string, key: string): string {
+  return native.mainGetPeerOption(id, key);
+}
+
+/** Set a per-peer option. */
+export function setPeerOption(id: string, key: string, value: string): void {
+  native.mainSetPeerOption(id, key, value);
 }
 
 /**

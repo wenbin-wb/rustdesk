@@ -1,4 +1,4 @@
-import { AuthService } from '../platform/AuthService';
+import { login as accountLogin } from '../platform/AccountService';
 import { UserProfile } from '../platform/ConfigStorage';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
@@ -36,7 +36,7 @@ export struct LoginDialog {
     this.errorMsg = '';
 
     try {
-      const res = await AuthService.login(this.account, this.password);
+      const res = await accountLogin(this.account, this.password);
       if (res.success && res.user) {
         if (this.onLoginSuccess) {
           this.onLoginSuccess(res.user);

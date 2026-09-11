@@ -22,7 +22,7 @@ import { PasswordDialog } from './PasswordDialog';
 import { RemoteSessionPage } from './RemoteSessionPage';
 import { ConfigManager, ServerConfig, StoredPeer, UserProfile } from '../platform/ConfigStorage';
 import { getOption } from '../platform/RustDeskBridge';
-import { AuthService } from '../platform/AuthService';
+import { logout as accountLogout } from '../platform/AccountService';
 
 const DOMAIN = 0x0000;
 const TAG = 'RustDesk';
@@ -293,7 +293,7 @@ struct Index {
 
   private async handleLogout(): Promise<void> {
     try {
-      await AuthService.logout();
+      await accountLogout();
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'logout failed: %{public}s', JSON.stringify(e));
     }

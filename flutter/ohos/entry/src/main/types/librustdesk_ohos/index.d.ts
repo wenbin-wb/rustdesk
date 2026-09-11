@@ -44,6 +44,28 @@ export const mainGetPeerSync: (id: string) => string;
 export const mainSetOption: (key: string, value: string) => void;
 export const mainSetOptions: (json: string) => void;
 
+// Local options: this device's own settings, separate from the synchronised configuration. The
+// account token lives here, which is where the core looks for it when building an authenticated
+// request.
+export const mainGetLocalOption: (key: string) => string;
+export const mainSetLocalOption: (key: string, value: string) => void;
+
+// Address book, favourites and per-peer data. Read from the core because the core is what the
+// account syncs into and where an alias or a remembered password lives.
+export const mainLoadAb: () => string;
+export const mainSaveAb: (json: string) => void;
+/** Favourite peer ids, as a JSON array. */
+export const mainLoadFavPeerIds: () => string;
+/** Stored peers with details; `filter` is a JSON array of ids, or empty for all. */
+export const mainLoadPeers: (filter: string) => string;
+export const mainSetPeerAlias: (id: string, alias: string) => void;
+export const mainPeerExists: (id: string) => boolean;
+export const mainPeerHasPassword: (id: string) => boolean;
+export const mainGetPeerOption: (id: string, key: string) => string;
+export const mainSetPeerOption: (id: string, key: string, value: string) => void;
+export const isDisableAb: () => boolean;
+export const isDisableAccount: () => boolean;
+
 // Core lifecycle. Must run before any other call: until it does, the core has no directory
 // to write to, so the device id is regenerated each launch and nothing is persisted.
 export const mainSetHomeDir: (home: string) => void;

@@ -275,9 +275,35 @@ pub fn main_set_option(key: String, value: String) {
 }
 
 /// Set several core options at once, from a JSON object of key to value.
+///
+/// Not used by this bridge and kept only because the native module declares it: it assigns the
+/// core's whole option map rather than merging, so setting options through it would drop every
+/// option it does not mention. Use [`main_set_option`] per key.
 #[napi(js_name = "mainSetOptions")]
 pub fn main_set_options(json: String) {
     librustdesk::flutter_ffi::main_set_options(json)
+}
+
+// --- local options ------------------------------------------------------------
+//
+// A separate store from the global options. It holds this device's own settings -- where the
+// account token goes, for instance -- without those becoming part of the synchronised
+// configuration.
+//
+// The account token lives here because that is where the core and the desktop client look for it
+// when they build an authenticated request. The front end signs in over HTTP, so it has to put the
+// token somewhere the rest of the app will find it, and this is that place.
+
+/// Read a local option, empty when unset.
+#[napi(js_name = "mainGetLocalOption")]
+pub fn main_get_local_option(key: String) -> String {
+    librustdesk::flutter_ffi::main_get_local_option(key).0
+}
+
+/// Set a local option.
+#[napi(js_name = "mainSetLocalOption")]
+pub fn main_set_local_option(key: String, value: String) {
+    librustdesk::flutter_ffi::main_set_local_option(key, value)
 }
 
 // --- core lifecycle -----------------------------------------------------------
