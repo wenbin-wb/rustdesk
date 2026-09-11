@@ -115,6 +115,19 @@ interface ServerPeer {
 }
 
 /**
+ * A tag as the account defines it.
+ *
+ * The account names its tags and gives each a colour; a device refers to them by name. Without
+ * fetching these the names on a device are all that is known, and every tag would have to be
+ * coloured by guesswork.
+ */
+interface ServerTag {
+  name?: string;
+  /** The tag's colour as a 32-bit ARGB integer, which is how the desktop client reads it. */
+  color?: number;
+}
+
+/**
  * The paged shape every address-book list endpoint uses.
  *
  * `total` is the count across all pages, which is what tells the caller whether to ask again, and
@@ -395,7 +408,7 @@ async function fetchPaged<T>(url: string, token: string, ab?: string): Promise<T
   return out;
 }
 
-/** One book's peers, in the core's entry shape. */
+/** One book's peers and tags, in the core's entry shape. */
 async function loadBook(base: string, token: string, guid: string, name: string): Promise<AbEntry> {
   const peers: AbPeer[] = [];
   const list = await fetchPaged<ServerPeer>(`${base}/api/ab/peers`, token, guid);
@@ -410,6 +423,7 @@ async function loadBook(base: string, token: string, guid: string, name: string)
       hostname: raw.hostname ?? '',
       alias: raw.alias ?? '',
       platform: platformOf(raw.platform),
+      // The tag NAMES on this device; what they mean is in the book's own tag list below.
       tags: Array.isArray(raw.tags) ? raw.tags : [],
       loginName: raw.loginName ?? '',
       // The stored password and key hash travel with the peer, which is what lets a connect skip
@@ -419,7 +433,61 @@ async function loadBook(base: string, token: string, guid: string, name: string)
       forceAlwaysRelay: raw.forceAlwaysRelay === true
     });
   }
-  return { guid: guid, name: name, tags: [], peers: peers };
+
+  // The book's tags and their colours. Until this was fetched the names on each device were all
+  // that was known, so a tag could only be shown as text and coloured by guesswork -- and the
+  // whole tag list was unavailable for filtering.
+  const tags = await loadTags(base, token, guid);
+  return {
+    guid: guid,
+    name: name,
+    tags: tags.names,
+    // A JSON map rather than a struct, because that is what the core stores and what the desktop
+    // client writes; keeping the same form means a book synced here reads the same there.
+    tag_colors: JSON.stringify(tags.colors),
+    peers: peers
+  };
+}
+
+/** The tag names in a book, and their colours keyed by name. */
+interface BookTags {
+  names: string[];
+  colors: Record<string, number>;
+}
+
+/**
+ * Fetch one book's tags.
+ *
+ * Returns a plain LIST rather than the paged shape the other endpoints use, which is why this does
+ * not go through fetchPaged. A book with no tags is the ordinary case and not an error.
+ */
+async function loadTags(base: string, token: string, guid: string): Promise<BookTags> {
+  const names: string[] = [];
+  const colors: Record<string, number> = {};
+  const reply = await post(`${base}/api/ab/tags/${guid}`, token);
+  if (!reply.ok) {
+    return { names: names, colors: colors };
+  }
+  let parsed: ServerTag[];
+  try {
+    parsed = JSON.parse(reply.text) as ServerTag[];
+  } catch (e) {
+    return { names: names, colors: colors };
+  }
+  if (!Array.isArray(parsed)) {
+    return { names: names, colors: colors };
+  }
+  for (const tag of parsed) {
+    const tagName = tag.name ?? '';
+    if (tagName.length === 0) {
+      continue;
+    }
+    names.push(tagName);
+    if (typeof tag.color === 'number') {
+      colors[tagName] = tag.color;
+    }
+  }
+  return { names: names, colors: colors };
 }
 
 /**

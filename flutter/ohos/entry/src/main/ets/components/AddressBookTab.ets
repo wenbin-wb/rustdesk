@@ -34,6 +34,10 @@ interface PeerRow {
   platform: string;
   /** Whether a password is held for this device. */
   hasPassword: boolean;
+  /** The tag names this device carries, shown as coloured dots. */
+  tags: string[];
+  /** Which address book the device came from, by index into the book list. */
+  book: number;
 }
 
 /** One address book, and the devices in it. */
@@ -78,6 +82,33 @@ export struct AddressBookTab {
   @State private subTab: number = TAB_ADDRESS_BOOK;
   @State private query: string = '';
   @State private signedIn: boolean = false;
+
+  /** The names of the address books, in the order they are shown. */
+  @State private bookNames: string[] = [];
+  /**
+   * Which book is being shown, as an index into {@link bookNames}.
+   *
+   * -1 means all of them. Books are shown together only when there is one, because a chooser with
+   * a single entry is a control that does nothing.
+   */
+  @State private bookFilter: number = -1;
+  /** The tags in the books on screen, with the special untagged entry first. */
+  @State private tagNames: string[] = [];
+  /** Which tags are selected, as indices into {@link tagNames}. Empty means no tag filter. */
+  @State private tagFilter: number[] = [];
+  /** Whether the filter panel is up. */
+  @State private sheetOpen: boolean = false;
+  /**
+   * The selections being made in the panel, applied only when the user confirms.
+   *
+   * Held apart from the live filters so closing the panel without confirming leaves the list as it
+   * was. Editing the live values directly would make every tap take effect immediately and leave
+   * nothing for a cancel to undo.
+   */
+  @State private draftBook: number = -1;
+  @State private draftTags: number[] = [];
+  /** Tag colours by name, from the account where it defines one and derived otherwise. */
+  private tagColors: Record<string, string> = {};
   /**
    * Which devices the server reported as online.
    *
@@ -131,7 +162,19 @@ export struct AddressBookTab {
     try {
       const book: AddressBook = loadAddressBook();
       this.signedIn = (book.access_token ?? '').length > 0;
-      this.groups = groupOf(book);
+      const shape = shapeOf(book);
+      this.groups = shape.groups;
+      this.bookNames = shape.bookNames;
+      this.tagNames = shape.tagNames;
+      this.tagColors = shape.tagColors;
+      // A filter that outlives the list it referred to would hide everything with nothing on
+      // screen to explain why, so it is dropped when the books it indexed are gone.
+      if (this.bookFilter >= this.bookNames.length) {
+        this.bookFilter = this.bookNames.length > 1 ? 0 : -1;
+      }
+      if (this.tagFilter.some((i: number) => i >= this.tagNames.length)) {
+        this.tagFilter = [];
+      }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'address book unreadable: %{public}s', messageOf(e));
     }
@@ -234,26 +277,51 @@ export struct AddressBookTab {
     } else {
       source = this.groups;
     }
-    if (wanted.length === 0) {
-      return source.filter((group: PeerGroup) => group.peers.length > 0);
-    }
+    const selectedTags = this.selectedTagNames();
+
     const out: PeerGroup[] = [];
     for (const group of source) {
       const matched: PeerRow[] = [];
       for (const peer of group.peers) {
+        if (this.bookFilter >= 0 && this.subTab === TAB_ADDRESS_BOOK && peer.book !== this.bookFilter) {
+          continue;
+        }
+        if (!hitsTags(selectedTags, peer.tags)) {
+          continue;
+        }
         // The device name and the account's own name for it are both worth matching, because a
         // user may have either in mind.
-        if (peer.title.toLowerCase().includes(wanted) ||
-            peer.hostname.toLowerCase().includes(wanted) ||
-            peer.id.includes(wanted)) {
-          matched.push(peer);
+        if (wanted.length > 0 &&
+            !peer.title.toLowerCase().includes(wanted) &&
+            !peer.hostname.toLowerCase().includes(wanted) &&
+            !peer.id.includes(wanted)) {
+          continue;
         }
+        matched.push(peer);
       }
       if (matched.length > 0) {
         out.push({ name: group.name, peers: matched });
       }
     }
     return out;
+  }
+
+  /** The selected tag names, translating the untagged entry to the empty name it stands for. */
+  private selectedTagNames(): string[] {
+    const out: string[] = [];
+    for (const index of this.tagFilter) {
+      if (index === 0) {
+        out.push(UNTAGGED);
+      } else if (index - 1 < this.tagNames.length) {
+        out.push(this.tagNames[index - 1]);
+      }
+    }
+    return out;
+  }
+
+  /** The tags to filter by, which are the ones the shown books define. */
+  private filterableTags(): string[] {
+    return this.tagNames;
   }
 
   private hasAnyPeer(): boolean {
@@ -327,17 +395,33 @@ export struct AddressBookTab {
 
   // --- view -------------------------------------------------------------------
 
+  /**
+   * The tab body.
+   *
+   * Two rows of chrome rather than four. The address book and tag filters used to sit here as
+   * their own rows -- a dropdown plus a scrolling chip strip -- which pushed the first device
+   * roughly a quarter of the way down the screen and left the tags clipped at the edge. They are
+   * both filters and they now live together in one panel, with whatever is active shown as
+   * removable chips only while it is actually filtering something.
+   */
   build() {
-    Column({ space: 12 }) {
-      this.buildSubTabs()
+    Column({ space: 10 }) {
+      this.buildHeaderRow()
       this.buildSearch()
+      if (this.activeFilters().length > 0) {
+        this.buildActiveFilters()
+      }
 
       if (!this.hasAnyPeer() && !this.signedIn) {
         this.buildEmptyState($r('app.string.ab_signed_out'), $r('app.string.ab_signed_out_hint'))
       } else if (this.visibleGroups().length === 0) {
         this.buildEmptyState(
-          this.query.length > 0 ? $r('app.string.ab_no_match') : $r('app.string.ab_empty'),
-          this.query.length > 0 ? $r('app.string.ab_no_match_hint') : $r('app.string.ab_empty_hint')
+          this.query.length > 0 || this.activeFilters().length > 0
+            ? $r('app.string.ab_no_match')
+            : $r('app.string.ab_empty'),
+          this.query.length > 0 || this.activeFilters().length > 0
+            ? $r('app.string.ab_no_match_hint')
+            : $r('app.string.ab_empty_hint')
         )
       } else {
         this.buildList()
@@ -347,22 +431,59 @@ export struct AddressBookTab {
     .height('100%')
   }
 
+  /**
+   * The sub-tabs, and the way into the filters.
+   *
+   * The filter entry carries a count, because a list that is hiding devices must say that it is:
+   * an empty result with an active filter and an empty result without one look identical, and only
+   * one of them is a problem.
+   */
   @Builder
-  private buildSubTabs() {
-    ChipGroup({
-      items: [
-        { label: { text: '地址簿' } } as ChipGroupItemOptions,
-        { label: { text: '收藏' } } as ChipGroupItemOptions,
-        { label: { text: '最近' } } as ChipGroupItemOptions
-      ],
-      selectedIndexes: [this.subTab],
-      onChange: (indexes: Array<number>) => {
-        if (indexes.length > 0) {
-          this.subTab = indexes[0];
+  private buildHeaderRow() {
+    Row({ space: 8 }) {
+      ChipGroup({
+        items: [
+          { label: { text: '地址簿' } } as ChipGroupItemOptions,
+          { label: { text: '收藏' } } as ChipGroupItemOptions,
+          { label: { text: '最近' } } as ChipGroupItemOptions
+        ],
+        selectedIndexes: [this.subTab],
+        onChange: (indexes: Array<number>) => {
+          if (indexes.length > 0) {
+            this.subTab = indexes[0];
+          }
+        }
+      })
+        .layoutWeight(1)
+
+      // Only the address book has books and tags to filter by; favourites and recent devices come
+      // from this device and carry neither.
+      if (this.subTab === TAB_ADDRESS_BOOK) {
+        Badge({
+          count: this.activeFilterCount(),
+          position: BadgePosition.RightTop,
+          style: { badgeSize: 14, fontSize: 9 }
+        }) {
+          Button('筛选')
+            .fontSize($r('app.float.font_caption'))
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor($r('app.color.bg_card'))
+            .fontColor(this.activeFilterCount() > 0
+              ? $r('app.color.brand')
+              : $r('app.color.text_secondary'))
+            .borderRadius($r('app.float.radius_control'))
+            .onClick(() => {
+              // The draft starts from what is already applied, so opening the panel is never a
+              // reset of the user's own choices.
+              this.draftBook = this.bookFilter;
+              this.draftTags = this.tagFilter.slice(0);
+              this.sheetOpen = true;
+            })
         }
       }
-    })
-      .width('100%')
+    }
+    .width('100%')
   }
 
   @Builder
@@ -376,6 +497,218 @@ export struct AddressBookTab {
       .onChange((value: string) => {
         this.query = value;
       })
+  }
+
+  /**
+   * What is currently filtering the list, each removable on its own.
+   *
+   * Shown only while something is applied, so it costs nothing in the ordinary case, and each chip
+   * can be dropped without reopening the panel.
+   */
+  @Builder
+  private buildActiveFilters() {
+    Scroll() {
+      Row({ space: 8 }) {
+        ForEach(this.activeFilters(), (label: string) => {
+          Row({ space: 4 }) {
+            Text(label)
+              .fontSize($r('app.float.font_caption'))
+              .fontColor($r('app.color.brand'))
+            Text('✕')
+              .fontSize($r('app.float.font_caption'))
+              .fontColor($r('app.color.brand'))
+          }
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .backgroundColor($r('app.color.bg_subtle'))
+          .borderRadius($r('app.float.radius_control'))
+          .onClick(() => {
+            this.clearFilter(label);
+          })
+        }, (label: string) => label)
+
+        Text('清除全部')
+          .fontSize($r('app.float.font_caption'))
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 4, top: 5, bottom: 5 })
+          .onClick(() => {
+            this.bookFilter = this.bookNames.length > 1 ? 0 : -1;
+            this.tagFilter = [];
+          })
+      }
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .align(Alignment.Start)
+  }
+
+  /** The labels of whatever is currently applied, which is also the list of removable chips. */
+  private activeFilters(): string[] {
+    const out: string[] = [];
+    if (this.subTab === TAB_ADDRESS_BOOK && this.bookFilter >= 0 && this.bookFilter < this.bookNames.length) {
+      out.push(this.bookNames[this.bookFilter]);
+    }
+    for (const index of this.tagFilter) {
+      if (index === 0) {
+        out.push('未分类');
+      } else if (index - 1 < this.tagNames.length) {
+        out.push(this.tagNames[index - 1]);
+      }
+    }
+    return out;
+  }
+
+  /** How many filters are applied, for the badge. Books and tags both count. */
+  private activeFilterCount(): number {
+    return this.activeFilters().length;
+  }
+
+  /** Remove one applied filter, by the label the chip shows. */
+  private clearFilter(label: string): void {
+    if (this.bookFilter >= 0 && this.bookNames[this.bookFilter] === label) {
+      this.bookFilter = this.bookNames.length > 1 ? 0 : -1;
+      return;
+    }
+    const next: number[] = [];
+    for (const index of this.tagFilter) {
+      const isUntagged = index === 0;
+      const name = isUntagged ? '未分类' : (this.tagNames[index - 1] ?? '');
+      if (name !== label) {
+        next.push(index);
+      }
+    }
+    this.tagFilter = next;
+  }
+
+  /**
+   * The filter panel.
+   *
+   * A half-modal sheet rather than rows in the page: books and tags are both choices made once and
+   * then left alone, so keeping them on screen costs the list permanent space for something used
+   * rarely. The tags wrap here instead of scrolling off the edge, which is what made the last ones
+   * unreachable before.
+   */
+  @Builder
+  private buildFilterSheet() {
+    Column({ space: 14 }) {
+      Row() {
+        Text('筛选')
+          .fontSize($r('app.float.font_title'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_title'))
+        Blank()
+        Text('重置')
+          .fontSize($r('app.float.font_body'))
+          .fontColor($r('app.color.brand'))
+          .onClick(() => {
+            this.draftBook = this.bookNames.length > 1 ? 0 : -1;
+            this.draftTags = [];
+          })
+      }
+      .width('100%')
+
+      Scroll() {
+        Column({ space: 14 }) {
+          if (this.bookNames.length > 1) {
+            Column({ space: 8 }) {
+              Text('地址簿')
+                .fontSize($r('app.float.font_caption'))
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+              // Single select: a device belongs to exactly one book, so choosing a second one
+              // replaces the first rather than narrowing to nothing.
+              ChipGroup({
+                items: this.bookChipItems(),
+                selectedIndexes: [this.draftBook < 0 ? 0 : this.draftBook + 1],
+                onChange: (indexes: Array<number>) => {
+                  if (indexes.length > 0) {
+                    this.draftBook = indexes[0] - 1;
+                  }
+                }
+              })
+                .width('100%')
+            }
+            .width('100%')
+          }
+
+          if (this.filterableTags().length > 0) {
+            Column({ space: 8 }) {
+              Text('标签')
+                .fontSize($r('app.float.font_caption'))
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+              // Multi-select, and the chips wrap here rather than scrolling away.
+              ChipGroup({
+                items: this.tagChipItems(),
+                selectedIndexes: this.draftTags,
+                multiple: true,
+                onChange: (indexes: Array<number>) => {
+                  this.draftTags = indexes;
+                }
+              })
+                .width('100%')
+            }
+            .width('100%')
+          }
+        }
+        .width('100%')
+      }
+      .layoutWeight(1)
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+
+      Button(`查看 ${this.draftMatchCount()} 个设备`)
+        .width('100%')
+        .height(44)
+        .backgroundColor($r('app.color.brand'))
+        .fontColor(Color.White)
+        .onClick(() => {
+          this.bookFilter = this.draftBook;
+          this.tagFilter = this.draftTags.slice(0);
+          this.sheetOpen = false;
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 12, bottom: 20 })
+  }
+
+  /** How many devices the draft selection would leave, so the button is not a leap of faith. */
+  private draftMatchCount(): number {
+    const savedBook = this.bookFilter;
+    const savedTags = this.tagFilter;
+    // The same predicate the list uses, run against the draft rather than the applied values.
+    this.bookFilter = this.draftBook;
+    this.tagFilter = this.draftTags;
+    let count = 0;
+    try {
+      for (const group of this.visibleGroups()) {
+        count += group.peers.length;
+      }
+    } finally {
+      this.bookFilter = savedBook;
+      this.tagFilter = savedTags;
+    }
+    return count;
+  }
+
+  /** The book choices: "all" first, then each book. */
+  private bookChipItems(): ChipGroupItemOptions[] {
+    const items: ChipGroupItemOptions[] = [
+      { label: { text: `全部 (${this.bookNames.length})` } } as ChipGroupItemOptions
+    ];
+    for (const name of this.bookNames) {
+      items.push({ label: { text: name } } as ChipGroupItemOptions);
+    }
+    return items;
+  }
+
+  private tagChipItems(): ChipGroupItemOptions[] {
+    const items: ChipGroupItemOptions[] = [{ label: { text: '未分类' } } as ChipGroupItemOptions];
+    for (const tag of this.filterableTags()) {
+      items.push({ label: { text: tag } } as ChipGroupItemOptions);
+    }
+    return items;
   }
 
   /**
@@ -416,6 +749,18 @@ export struct AddressBookTab {
     // material has content to blur -- which is the whole point of a floating bar. Insetting the
     // container instead left the bar sitting over empty background, where it read as a solid band.
     .contentEndOffset(this.contentBottomInset)
+    // The filter panel, attached to the list so it rises from the bottom over the content it
+    // filters rather than replacing the page.
+    .bindSheet(this.sheetOpen, this.buildFilterSheet(), {
+      height: SheetSize.MEDIUM,
+      dragBar: false,
+      showClose: true,
+      onDisappear: () => {
+        // Covers the sheet being dismissed by a drag or the close control, where nothing told this
+        // component it had gone -- without it the next open would find the flag already true.
+        this.sheetOpen = false;
+      }
+    })
   }
 
   /** The actions revealed by sliding a row. */
@@ -508,6 +853,26 @@ export struct AddressBookTab {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
+
+        // The tags, as coloured dots rather than text. A device can carry several, and spelling
+        // them out would take the line the device's own name needs; the colour is what a user
+        // recognises at a glance, and the full names are in the row's menu.
+        if (peer.tags.length > 0) {
+          Row({ space: 4 }) {
+            ForEach(peer.tags.slice(0, TAG_DOTS_MAX), (tag: string) => {
+              Circle()
+                .width(7)
+                .height(7)
+                .fill(this.tagColors[tag] ?? derivedTagColor(tag))
+            }, (tag: string) => tag)
+            if (peer.tags.length > TAG_DOTS_MAX) {
+              Text(`+${peer.tags.length - TAG_DOTS_MAX}`)
+                .fontSize($r('app.float.font_caption'))
+                .fontColor($r('app.color.text_hint'))
+            }
+          }
+          .margin({ top: 2 })
+        }
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
@@ -635,22 +1000,148 @@ function platformIcon(platform: string): Resource {
   return $r('app.media.platform_linux');
 }
 
-/** The address book, one group per book, skipping empty books. */
-function groupOf(book: AddressBook): PeerGroup[] {
+/** The tag list's first entry, standing for devices with no tags at all. */
+const UNTAGGED = '__untagged__';
+/** How many tag dots fit on a card before the rest are counted. */
+const TAG_DOTS_MAX = 5;
+
+/**
+ * The colours a tag without a colour of its own is drawn in.
+ *
+ * The same set the desktop client uses, so a tag that has no colour assigned looks the same here
+ * as it does there.
+ */
+const TAG_PALETTE: string[] = [
+  '#F44336', '#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#9E9E9E',
+  '#00BCD4', '#CDDC39', '#009688', '#F48FB1', '#3F51B5', '#795548'
+];
+
+/** The address book as a whole, in the shape the view needs. */
+interface BookShape {
+  groups: PeerGroup[];
+  bookNames: string[];
+  /** The tags across the books on screen, without duplicates. */
+  tagNames: string[];
+  tagColors: Record<string, string>;
+}
+
+/**
+ * Reshape the stored book for display.
+ *
+ * Done once per load rather than inside the builders: a builder runs on every frame of a scroll,
+ * and rebuilding this there would repeat the same work continuously.
+ */
+function shapeOf(book: AddressBook): BookShape {
   const groups: PeerGroup[] = [];
-  for (const entry of (book.ab_entries ?? [])) {
+  const bookNames: string[] = [];
+  const tagNames: string[] = [];
+  const seenTag: Record<string, boolean> = {};
+  const tagColors: Record<string, string> = {};
+  const entries = book.ab_entries ?? [];
+
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    const name = entry.name ?? '';
+    bookNames.push(name);
+
+    // The book's own tag definitions, which are what the filter offers and what carry colours.
+    for (const tag of (entry.tags ?? [])) {
+      if (tag.length > 0 && !seenTag[tag]) {
+        seenTag[tag] = true;
+        tagNames.push(tag);
+      }
+    }
+    for (const tag of Object.keys(parseTagColors(entry.tag_colors))) {
+      if (tag.length > 0 && !seenTag[tag]) {
+        seenTag[tag] = true;
+        tagNames.push(tag);
+      }
+    }
+    const colors = parseTagColors(entry.tag_colors);
+    for (const tag of Object.keys(colors)) {
+      tagColors[tag] = argbToHex(colors[tag]);
+    }
+
     const peers: PeerRow[] = [];
     for (const peer of (entry.peers ?? [])) {
       // An entry with no id cannot be connected to, so it is not a row.
       if ((peer.id ?? '').length > 0) {
-        peers.push(rowOf(peer));
+        peers.push(rowOf(peer, index));
       }
     }
     if (peers.length > 0) {
-      groups.push({ name: entry.name ?? '', peers: peers });
+      groups.push({ name: name, peers: peers });
     }
   }
-  return groups;
+  return { groups: groups, bookNames: bookNames, tagNames: tagNames, tagColors: tagColors };
+}
+
+/**
+ * Whether a device satisfies a tag selection.
+ *
+ * Union rather than intersection, and the untagged entry is folded in the same way the desktop
+ * client folds it: selecting it alone finds the devices with no tags, and selecting it together
+ * with real tags adds them to the result rather than narrowing it to nothing.
+ */
+function hitsTags(selected: string[], tags: string[]): boolean {
+  if (selected.length === 0) {
+    return true;
+  }
+  const untaggedSelected = selected.indexOf(UNTAGGED) >= 0;
+  const realTags: string[] = [];
+  for (const tag of selected) {
+    if (tag !== UNTAGGED) {
+      realTags.push(tag);
+    }
+  }
+  if (tags.length === 0) {
+    // A device with no tags is in the result only because the untagged entry was chosen.
+    return untaggedSelected;
+  }
+  for (const tag of realTags) {
+    if (tags.indexOf(tag) >= 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The stored tag colours, as a map of name to a 32-bit integer. Parses leniently. */
+function parseTagColors(json: string | undefined): Record<string, number> {
+  if (!json || json.length === 0) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(json) as Record<string, number>;
+    return parsed ? parsed : {};
+  } catch (e) {
+    // A malformed colour map must not cost the whole book; the tags then fall back to derived
+    // colours, which is what they would have had anyway.
+    return {};
+  }
+}
+
+/** A 32-bit ARGB integer as a colour string ArkUI accepts. */
+function argbToHex(value: number): string {
+  // `>>> 0` because the value arrives signed for anything with the top bit set, and a negative
+  // number would render as an invalid colour rather than the intended one.
+  const hex = (value >>> 0).toString(16).padStart(8, '0');
+  return `#${hex}`;
+}
+
+/**
+ * A colour for a tag the account has not given one.
+ *
+ * Derived from the name so it is stable: the same tag is the same colour on every launch and in
+ * every list, which is what makes the dots recognisable at all.
+ */
+function derivedTagColor(tag: string): string {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = (hash * 31 + tag.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % TAG_PALETTE.length;
+  return TAG_PALETTE[index];
 }
 
 /**
@@ -659,7 +1150,7 @@ function groupOf(book: AddressBook): PeerGroup[] {
  * Every field is read through `?? ''`: the core omits empty fields from its JSON rather than
  * sending them empty, so any of these can be absent at runtime however the interface reads.
  */
-function rowOf(peer: AbPeer): PeerRow {
+function rowOf(peer: AbPeer, book: number): PeerRow {
   const id = peer.id ?? '';
   const alias = peer.alias ?? '';
   const hostname = peer.hostname ?? '';
@@ -674,7 +1165,9 @@ function rowOf(peer: AbPeer): PeerRow {
     title: alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id),
     hostname: hostname,
     platform: peer.platform ?? '',
-    hasPassword: hasPassword
+    hasPassword: hasPassword,
+    tags: peer.tags ?? [],
+    book: book
   };
 }
 
@@ -703,8 +1196,8 @@ function favouritesOf(): PeerRow[] {
     // A favourite can outlive its address-book entry -- the device may have been removed from the
     // account but not from this device's favourites -- so a missing one still gets a row rather
     // than being dropped silently.
-    rows.push(found ? rowOf(found) : {
-      id: id, title: id, hostname: '', platform: '', hasPassword: false
+    rows.push(found ? rowOf(found, -1) : {
+      id: id, title: id, hostname: '', platform: '', hasPassword: false, tags: [], book: -1
     });
   }
   return rows;
@@ -732,7 +1225,11 @@ function recentOf(): PeerRow[] {
       title: alias.length > 0 ? alias : (hostname.length > 0 ? hostname : id),
       hostname: hostname,
       platform: peer.platform ?? '',
-      hasPassword: hasPassword
+      hasPassword: hasPassword,
+      // Recent devices come from this device's own store, which holds no tags and belongs to no
+      // account book.
+      tags: [],
+      book: -1
     });
   }
   return rows;

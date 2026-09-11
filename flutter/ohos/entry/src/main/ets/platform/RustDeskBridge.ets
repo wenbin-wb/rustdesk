@@ -333,7 +333,15 @@ export interface AddressBook {
 export interface AbEntry {
   guid?: string;
   name?: string;
+  /** The tag names this book defines. */
   tags?: string[];
+  /**
+   * Tag colours as a JSON object of name to a 32-bit ARGB integer.
+   *
+   * A string rather than a map because that is the form the core stores and the desktop client
+   * writes, so a book synced here reads identically there.
+   */
+  tag_colors?: string;
   peers?: AbPeer[];
 }
 
