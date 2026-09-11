@@ -22,7 +22,7 @@ import { PasswordDialog } from './PasswordDialog';
 import { RemoteSessionPage } from './RemoteSessionPage';
 import { ConfigManager, ServerConfig, StoredPeer, UserProfile } from '../platform/ConfigStorage';
 import { getOption } from '../platform/RustDeskBridge';
-import { logout as accountLogout } from '../platform/AccountService';
+import { logout as accountLogout, isSignedIn, syncAddressBook } from '../platform/AccountService';
 
 const DOMAIN = 0x0000;
 const TAG = 'RustDesk';
@@ -165,6 +165,36 @@ struct Index {
     this.loadUserProfile().catch((e: Object) => {
       hilog.warn(DOMAIN, TAG, 'user profile unavailable: %{public}s', JSON.stringify(e));
     });
+    this.refreshAccount().catch((e: Object) => {
+      hilog.warn(DOMAIN, TAG, 'account refresh failed: %{public}s', JSON.stringify(e));
+    });
+  }
+
+  /**
+   * Re-read the account's address book when a session is already signed in.
+   *
+   * Only when already signed in: this must never prompt, and it must not sign anyone in. The point
+   * is that a book fetched on some earlier run is stale -- devices get added and renamed from other
+   * clients -- and the stored copy is what the lists read, so without this the app would show
+   * whatever was true the last time the user typed their password. The desktop client refreshes on
+   * the same trigger.
+   *
+   * A failure is logged and otherwise ignored, because the stored book is still usable and a
+   * network problem at launch should not produce an error the user has to dismiss.
+   */
+  private async refreshAccount(): Promise<void> {
+    if (!isSignedIn()) {
+      return;
+    }
+    const result = await syncAddressBook();
+    if (!result.success) {
+      hilog.warn(DOMAIN, TAG, 'address book refresh: %{public}s', result.message);
+      return;
+    }
+    hilog.info(DOMAIN, TAG, 'address book refreshed: %{public}d peers', result.peers);
+    // The tabs read the stored book in their own aboutToAppear, which has already run by now, so
+    // they are told to read it again.
+    this.peersRevision += 1;
   }
 
   aboutToDisappear(): void {
