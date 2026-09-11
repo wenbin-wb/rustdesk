@@ -218,15 +218,53 @@
 > **说明**：`RemoteSessionPage.ets` / `ServerSettingsDialog.ets` / `ConfigStorage.ets` 携带**本次会话之前就存在的未提交改动**（上个 agent 遗留）。因 P3 构建依赖它们，随本次提交一并入库。
 
 ### P4 · 控制端核心链路
+
 - [x] **移除伪实现**：`RemoteSessionPage` 原来默认把 `https://rustdesk.com/web/` 装进 WebView，
   另有 `DesktopCanvas` 用 `ctx.arc` **手绘假桌面**并只记录点击 —— 两者都不是会话（网页客户端是另一个产品，
-  完全不知道本应用的设备 ID 与目标）。**已全部删除**，改为如实显示核心真实状态 + 明确标注未接通部分
-- [ ] 真实连接/鉴权（rendezvous → relay/P2P → 会话）：需 `sessionAddSync` + `sessionStart`（收 `StreamSink<EventToUI>`）
-- [ ] 事件通道：核心 → ArkTS（`StreamSink` 在 ohos 上需换成 NAPI ThreadsafeFunction；`push_ui_event` 的 ohos 分支已预留）
-- [ ] 视频渲染（XComponent + 硬解）：消费核心的 `EventToUI::Rgba`，`getNextTextureKey` 已导出
-- [ ] 输入（触摸→鼠标/键盘、缩放、虚拟键鼠）
-- [ ] 剪贴板双向同步
-- [ ] 文件传输
+  完全不知道本应用的设备 ID 与目标）。**已全部删除**
+- [x] **真实连接** ✅ 已实现，**待真机验证**
+  - 桥接导出 `sessionAddSync` / `sessionStart` / `sessionClose`
+  - 核心侧新增 `session_start_ohos`：`session_start_` 需要 flutter_rust_bridge 的 `StreamSink`（Dart 通道），
+    ohos 无此物，故做同样的事但不带流；`io_loop` **每会话只启动一次**（显式记录，因为 Flutter 靠"流是否附加"判断）
+  - `RemoteSessionPage` 生成 UUID（**ArkTS 侧**，id 必须先于注册存在；`crypto.randomUUID` 此处不可用）→ add → start；
+    退出时**逆序**关闭
+  - 密码从对话框/存储**传给会话**（核心需要它鉴权）
+  - ⚠️ **已核实**：`mod client;` **未被门控**（`rendezvous_mediator` 对被控端才需要，ohos 与 iOS 一致地排除）
+- [x] **事件通道** ✅ 实现（改用轮询队列，非 ThreadsafeFunction）
+  - `push_ui_event` 的 ohos 分支把事件**入队**（上限 256），ArkTS 通过 `pollUiEvents` 取走并解析 JSON
+  - ⚠️ **承重细节**：对 `Rgba` 事件**必须返回"已发送"** —— 调用方据此决定帧是否走别的路，
+    答"未发送"会让核心**清掉刚解码的帧**，等于丢帧
+- [x] **视频渲染** ✅ 实现，**待真机验证**
+  - **不用 PixelMap**：它**无法通知内容已变** ⇒ 原地改写不重绘；每帧新建要付 `宽×高×4`（1080p≈8MB/帧）
+  - 改为写入 **XComponent 的 surface**（`native/src/surface.rs`）：`OH_NativeWindow_*` 直接写缓冲区，
+    **每帧不跨 N-API 边界**；参考项目亦用此路径
+  - 逐行拷贝（`stride ≠ width*4`，否则斜切）、失败路径收敛为单值、**绘制失败也释放帧**（否则连解码器一起停）
+- [x] **输入（触摸→鼠标）** ✅ 实现，**待真机验证**
+  - `RemoteInput` 独占消息构造（核心的 JSON 契约全是字符串，易错）与**坐标映射**
+    （触摸是 surface 的 vp，鼠标事件是**对端像素**）⇒ 按 `displaySize / surfaceSize` 缩放并**钳制到显示范围**；
+    每手势重算而**不缓存**（旋转/折叠会改变 surface，缓存会让此后每次触摸都错位）
+  - 手势：单指拖=移动指针（超过阈值才按下按钮，这样拖窗口/选文字才可用）、点按=左键、长按=右键、双指拖=滚轮
+  - 两个细节防"对端卡住"：`Cancel` 释放按住的键；双指手势**抑制抬起时的点击**（第一指的 Down 已移动过指针）
+  - ⚠️ `session_enter_or_leave` **有意不导出**：其函数体对移动端被门控掉，导出会"可调用但什么都不做"
+- [x] **平台名** ✅ 修：`my_platform` 原本在 ohos 上报 `Linux`（Rust target 保留 `target_os="linux"`），现报 `HarmonyOS`；
+  对端只对 Windows/MacOS/iOS 做特判，故新名字走通用分支（与移动端预期一致）
+- [ ] **剪贴板双向同步** —— 需先做一次**移植决策**，机制已查清：
+  - 现状：`clipboard` 模块对 ohos **被整体排除**（与 iOS 同样处理），故核心侧**没有**剪贴板入口
+  - **Android 的做法**（可照搬）：原生侧读系统剪贴板 → 拼 `[isClient 字节][MultiClipboards protobuf]`
+    → `FFI.onClipboardUpdate(buf)` → 核心 `send_clipboard_msg` → 对端；
+    反向由核心回调原生 `rustUpdateClipboard(clips)`
+  - 本端已有 `ClipboardBridge.ets`（读/写系统剪贴板），缺的是**核心侧的收发入口**
+  - 可选路径：① 对 ohos 解禁 `clipboard` 模块中需要的部分（`create_multi_clipboards` /
+    `handle_msg_multi_clipboards`），桥接加 `clipboardUpdate(buf)` 与"取回对端剪贴板"的导出；
+    ② 参照 iOS 的移动端路径
+- [ ] **文件传输** —— 需 `sessionAddSync(is_file_transfer=true)` + `sessionSendFiles`，且依赖文件选择器与进度回调
+- [ ] **键盘（物理/软键盘）** —— 桥接已导出 `sessionInputKey`（按名）与 `sessionInputString`（整段文本，
+  不受对端键盘布局影响）；ArkTS 侧尚未接软键盘与物理键映射
+
+> **P4 的验证边界**：以上四项**均未在真机上跑过**（设备已断开）。连接链路本身已做静态核实
+> （`client` 未门控、rendezvous 地址解析走 `custom-rendezvous-server` 选项且有 PROD 回退、
+> 5 层依赖与未定义符号检查通过）。**真机上第一件要确认的是状态条是否变成"已连接"**
+> —— 那代表有帧到达；若状态条通了而画面黑，问题就落在 surface 写入那一段，而不是连接链路。
 
 ### P5 · 收尾
 - [ ] 权限对齐 `module.json5`
