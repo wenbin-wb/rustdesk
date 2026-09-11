@@ -95,6 +95,12 @@
     { "name": "common_retry", "value": "重试" },
 
     { "name": "error_invalid_id", "value": "请输入有效的设备 ID" },
-    { "name": "error_self_id", "value": "不能连接到本机自身的 ID" }
+    { "name": "error_self_id", "value": "不能连接到本机自身的 ID" },
+    { "name": "ab_signed_out", "value": "尚未登录账号" },
+    { "name": "ab_signed_out_hint", "value": "登录 RustDesk 账号后，这里会显示地址簿中的设备" },
+    { "name": "ab_empty", "value": "地址簿为空" },
+    { "name": "ab_empty_hint", "value": "在 RustDesk 客户端或网页端添加设备后会显示在这里" },
+    { "name": "ab_no_match", "value": "没有匹配的设备" },
+    { "name": "ab_no_match_hint", "value": "试试其他名称或设备 ID" }
   ]
 }

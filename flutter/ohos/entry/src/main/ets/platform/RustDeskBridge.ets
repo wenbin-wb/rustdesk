@@ -291,16 +291,19 @@ export const LOCAL_OPTION_ACCESS_TOKEN = 'access_token';
 /**
  * One entry in the account's address book.
  *
- * The shape is the core's `Peer`, which the UI reads back by these exact names; a field missing
- * here is a field the peer list will show as blank.
+ * Every field is optional, and that is not defensive typing: the core serialises these structures
+ * with `skip_serializing_if = "String::is_empty"`, so an empty field is *absent* from the JSON it
+ * returns rather than present and empty. Declaring them as required would be a lie the compiler
+ * believes and the runtime does not -- reading `.length` on one that happens to be empty is a
+ * thrown exception, which is how this was found.
  */
 export interface AbPeer {
-  id: string;
-  username: string;
-  hostname: string;
-  alias: string;
-  platform: string;
-  tags: string[];
+  id?: string;
+  username?: string;
+  hostname?: string;
+  alias?: string;
+  platform?: string;
+  tags?: string[];
   /** The account that owns the device. */
   loginName?: string;
   /** The group the device belongs to, as the account organises it. */
@@ -311,26 +314,26 @@ export interface AbPeer {
   favorite?: boolean;
 }
 
-/** A stored peer as the core reports it. */
+/** A stored peer as the core reports it. Omitted-when-empty, as above. */
 export interface StoredPeerInfo {
-  id: string;
-  username: string;
-  hostname: string;
+  id?: string;
+  username?: string;
+  hostname?: string;
   alias?: string;
   platform?: string;
 }
 
-/** The address book as the core holds it. */
+/** The address book as the core holds it. Omitted-when-empty, as above. */
 export interface AddressBook {
-  access_token: string;
-  ab_entries: AbEntry[];
+  access_token?: string;
+  ab_entries?: AbEntry[];
 }
 
 export interface AbEntry {
-  guid: string;
-  name: string;
-  tags: string[];
-  peers: AbPeer[];
+  guid?: string;
+  name?: string;
+  tags?: string[];
+  peers?: AbPeer[];
 }
 
 /**

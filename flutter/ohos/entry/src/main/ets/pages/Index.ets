@@ -14,7 +14,7 @@ import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Breakpoint, observeBreakpoint, usesSideNavigation, pagePadding, maxContentWidth } from '../common/Breakpoint';
 import { RemoteTab, formatId } from '../components/RemoteTab';
-import { DevicesTab } from '../components/DevicesTab';
+import { AddressBookTab } from '../components/AddressBookTab';
 import { SettingsTab } from '../components/SettingsTab';
 import { ServerSettingsDialog } from './ServerSettingsDialog';
 import { LoginDialog } from './LoginDialog';
@@ -475,64 +475,83 @@ struct Index {
   /**
    * A tab's body. Content is width-capped and centred so a wide 2in1 window does not
    * stretch text lines to the point of being hard to read.
+   *
+   * The address book is the exception to the Scroll wrapper: it is built from a List, which does
+   * its own scrolling and recycling, and nesting the two makes the inner list unable to size
+   * itself -- it would either grow without bound or scroll as one oversized row.
    */
   @Builder
   private buildScrollableTab(index: number) {
-    Scroll() {
-      Column() {
-        if (index === 0) {
-          RemoteTab({
-            serverLabel: this.serverLabel,
-            peersRevision: this.peersRevision,
-            onConnect: (targetId: string) => {
-              this.beginConnect(targetId);
-            },
-            onTransferFile: () => {},
-            onOpenServerSettings: () => {
-               this.openServerSettings();
+    // Single root component: a @Builder renders one node, so the branches live inside it rather
+    // than choosing between two roots.
+    Column() {
+      if (index === 1) {
+        // The address book brings its own List, which does its own scrolling and recycling.
+        // Nesting it in a Scroll makes the list unable to size itself -- it would either grow
+        // without bound or scroll as one oversized row.
+        AddressBookTab({
+          peersRevision: this.peersRevision,
+          onConnect: (targetId: string) => {
+            this.beginConnect(targetId);
+          }
+        })
+          .width('100%')
+          .layoutWeight(1)
+      } else {
+        Scroll() {
+          Column() {
+            if (index === 0) {
+              RemoteTab({
+                serverLabel: this.serverLabel,
+                peersRevision: this.peersRevision,
+                onConnect: (targetId: string) => {
+                  this.beginConnect(targetId);
+                },
+                onTransferFile: () => {},
+                onOpenServerSettings: () => {
+                  this.openServerSettings();
+                }
+              })
+            } else {
+              SettingsTab({
+                userProfile: this.userProfile,
+                serverLabel: this.serverLabel,
+                onLogin: () => {
+                  this.loginDialogController.open();
+                },
+                onLogout: () => {
+                  this.handleLogout();
+                },
+                onOpenServerSettings: () => {
+                  this.openServerSettings();
+                }
+              })
             }
-          })
-        } else if (index === 1) {
-          DevicesTab({
-            peersRevision: this.peersRevision,
-            onConnect: (targetId: string) => {
-              this.beginConnect(targetId);
-            },
-            onPeersMutated: () => {
-              // Deleting here also changes what the remote tab's recent list should show.
-              this.peersRevision++;
-            }
-          })
-        } else {
-          SettingsTab({
-            userProfile: this.userProfile,
-            serverLabel: this.serverLabel,
-            onLogin: () => {
-              this.loginDialogController.open();
-            },
-            onLogout: () => {
-              this.handleLogout();
-            },
-            onOpenServerSettings: () => {
-               this.openServerSettings();
-            }
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: maxContentWidth(this.breakpoint) })
+          .padding({
+            left: pagePadding(this.breakpoint),
+            right: pagePadding(this.breakpoint),
+            top: 12,
+            // The bar floats over the content (barOverlap), so the content has to leave room for
+            // it: the bar is 65vp tall with a 20vp lift, plus room to scroll past comfortably.
+            bottom: usesSideNavigation(this.breakpoint) ? 24 : 104
           })
         }
+        .width('100%')
+        .layoutWeight(1)
+        .align(Alignment.Top)
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .constraintSize({ maxWidth: maxContentWidth(this.breakpoint) })
-      .padding({
-        left: pagePadding(this.breakpoint),
-        right: pagePadding(this.breakpoint),
-        top: 12,
-        // The bar floats over the content (barOverlap), so the content has to leave room for
-        // it: the bar is 65vp tall with a 20vp lift, plus room to scroll past comfortably.
-        bottom: usesSideNavigation(this.breakpoint) ? 24 : 104
-      })
     }
     .width('100%')
-    .height('100%')
-    .align(Alignment.Top)
-    .scrollBar(BarState.Off)
+    .layoutWeight(1)
+    .padding({
+      left: index === 1 ? pagePadding(this.breakpoint) : 0,
+      right: index === 1 ? pagePadding(this.breakpoint) : 0,
+      top: index === 1 ? 12 : 0,
+      bottom: index === 1 ? (usesSideNavigation(this.breakpoint) ? 24 : 104) : 0
+    })
   }
 }

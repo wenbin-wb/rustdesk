@@ -334,8 +334,10 @@ export async function syncAddressBook(): Promise<SyncResult> {
 
     let count = 0;
     for (const entry of entries) {
-      count += entry.peers.length;
+      count += (entry.peers ?? []).length;
     }
+    // Counted before saving, so the log describes what was fetched even though the stored copy
+    // omits empty fields on the way back out.
     hilog.info(DOMAIN, TAG, 'address book synced: %{public}d books, %{public}d peers',
       entries.length, count);
     return { success: true, message: '地址簿已同步', peers: count };

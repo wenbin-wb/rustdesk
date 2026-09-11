@@ -95,6 +95,12 @@
     { "name": "common_retry", "value": "Retry" },
 
     { "name": "error_invalid_id", "value": "Enter a valid device ID" },
-    { "name": "error_self_id", "value": "Cannot connect to this device's own ID" }
+    { "name": "error_self_id", "value": "Cannot connect to this device's own ID" },
+    { "name": "ab_signed_out", "value": "Not signed in" },
+    { "name": "ab_signed_out_hint", "value": "Sign in to your RustDesk account to see the devices in its address book here" },
+    { "name": "ab_empty", "value": "The address book is empty" },
+    { "name": "ab_empty_hint", "value": "Devices added from another RustDesk client will appear here" },
+    { "name": "ab_no_match", "value": "No matching devices" },
+    { "name": "ab_no_match_hint", "value": "Try a different name or device ID" }
   ]
 }
