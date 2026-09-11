@@ -268,11 +268,38 @@
   - `push_ui_event` 的 ohos 分支把事件**入队**（上限 256），ArkTS 通过 `pollUiEvents` 取走并解析 JSON
   - ⚠️ **承重细节**：对 `Rgba` 事件**必须返回"已发送"** —— 调用方据此决定帧是否走别的路，
     答"未发送"会让核心**清掉刚解码的帧**，等于丢帧
-- [x] **视频渲染** ✅ 实现，**待真机验证**
+- [x] **视频渲染（surface 侧）** ✅ 实现，真机确认 surface 已挂载并被合成
   - **不用 PixelMap**：它**无法通知内容已变** ⇒ 原地改写不重绘；每帧新建要付 `宽×高×4`（1080p≈8MB/帧）
   - 改为写入 **XComponent 的 surface**（`native/src/surface.rs`）：`OH_NativeWindow_*` 直接写缓冲区，
     **每帧不跨 N-API 边界**；参考项目亦用此路径
   - 逐行拷贝（`stride ≠ width*4`，否则斜切）、失败路径收敛为单值、**绘制失败也释放帧**（否则连解码器一起停）
+- [x] **核心日志可读** ✅ —— **本轮最重要的诊断能力**
+  - 核心日志**不进 hilog**（那是 Android 的分支），而是写文件：
+    `<filesDir>/.local/share/logs/RustDesk/flutter_ffi/rs_rCURRENT.log`
+  - **可用 `hdc file recv` 直接读取**，因此 Rust 侧的一切问题都不再是黑盒
+- [ ] 🔴 **视频解码器 —— 无画面（黑屏）的真正根因，当前最大阻塞**
+  - **实测证据**（核心日志，fail counter 持续增长到 212+）：
+    ```
+    ERROR [src/client.rs:2512] Failed to handle video frame, fail counter: 212
+    ERROR [src/client.rs:3887] handle video frame error, unsupported video frame type!
+    ```
+  - 连接本身**完全成功**：收到对端质量状态 `delay:40 / target_bitrate:2010`，无任何连接错误
+  - **根因**：`libs/scrap/src/common/codec.rs` 的 `Decoder::new` 在 ohos 上**一个后端都没有**
+    | 后端 | 条件 | ohos 可用性 |
+    |---|---|---|
+    | VP8/VP9/AV1（软解 vpx/aom）| `not(target_env="ohos")` 显式排除 | ❌ 未链接这些库 |
+    | `hwcodec` | `feature="hwcodec"` | ❌ **其源码只有 `android.rs`/`ffmpeg.rs`，零处 ohos** |
+    | `mediacodec` | `feature="mediacodec"` + `ndk` | ❌ Android 专属 |
+    | `vram` | 依赖 hwcodec | ❌ |
+  - **结论**：不是 surface 写错，而是**帧从未被解码**。这与我在 P4 留的故障分界方法一致
+    （连接通、画面黑 ⇒ 落在解码/渲染段）
+  - **可行路径（已在 NDK 中确认存在）**：鸿蒙有 Android MediaCodec 的对应物 ——
+    `<sysroot>/usr/include/multimedia/player_framework/native_avcodec_videodecoder.h`
+    （`OH_VideoDecoder_*`）+ `libnative_media_vdec.so` + `native_avcodec_base.h`（MIME/格式）
+  - **做法**：参照 `hwcodec/android.rs` 的结构新增 ohos 后端，把解码输出**直接接到已就绪的
+    surface 路径**（`OH_VideoDecoder_SetSurface` 或取 buffer 后交 `surface.rs`），
+    从而复用已经验证过的 `OH_NativeWindow_*` 写入链路
+  - ⚠️ 这是**一整个子系统**，不是小修补；但它一旦完成，黑屏即解除，且输入/剪贴板链路都已就位
 - [x] **输入（触摸→鼠标）** ✅ 实现，**待真机验证**
   - `RemoteInput` 独占消息构造（核心的 JSON 契约全是字符串，易错）与**坐标映射**
     （触摸是 surface 的 vp，鼠标事件是**对端像素**）⇒ 按 `displaySize / surfaceSize` 缩放并**钳制到显示范围**；
