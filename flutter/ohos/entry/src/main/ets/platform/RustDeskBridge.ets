@@ -101,6 +101,17 @@ interface RustDeskNative {
   sessionInputString(sessionId: string, value: string): void;
   clipboardTakePending(): string;
   clipboardSend(text: string): string;
+  sessionAddFileTransfer(sessionId: string, id: string, password: string): string;
+  sessionSendFiles(sessionId: string, actId: number, path: string, to: string,
+                   fileNum: number, includeHidden: boolean, isRemote: boolean): void;
+  sessionReadRemoteDir(sessionId: string, path: string, includeHidden: boolean): void;
+  sessionReadLocalDirSync(sessionId: string, path: string, showHidden: boolean): string;
+  sessionCreateDir(sessionId: string, actId: number, path: string, isRemote: boolean): void;
+  sessionRemoveFile(sessionId: string, actId: number, path: string, fileNum: number, isRemote: boolean): void;
+  sessionRemoveDirAll(sessionId: string, actId: number, path: string, isRemote: boolean, showHidden: boolean): void;
+  sessionRenameFile(sessionId: string, actId: number, path: string, newName: string, isRemote: boolean): void;
+  sessionSetConfirmOverrideFile(sessionId: string, actId: number, fileNum: number,
+                                needOverride: boolean, remember: boolean, isUpload: boolean): void;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */

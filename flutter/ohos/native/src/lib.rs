@@ -598,3 +598,135 @@ pub fn clipboard_take_pending() -> String {
 pub fn clipboard_send(text: String) -> String {
     librustdesk::flutter_ffi::clipboard_send(text)
 }
+
+// --- file transfer ------------------------------------------------------------
+//
+// A file transfer is a session of its own kind, not a mode of a remote-desktop one: registering
+// it with isFileTransfer makes the core negotiate the file protocol instead of the video one.
+// Operations after that are per-request, each identified by an `actId` the front end allocates,
+// and the core answers with events on the UI queue rather than by returning here.
+
+/// Register a file-transfer session. Empty string on success, otherwise the failure message.
+#[napi(js_name = "sessionAddFileTransfer")]
+pub fn session_add_file_transfer(session_id: String, id: String, password: String) -> String {
+    let Some(session_id) = parse_session(&session_id) else {
+        return "invalid session id".to_owned();
+    };
+    librustdesk::flutter_ffi::session_add_sync(
+        session_id,
+        id,
+        // isFileTransfer -- this is what makes it a file transfer rather than a desktop session.
+        true,
+        false,
+        false,
+        false,
+        false,
+        String::new(),
+        false,
+        password,
+        false,
+        None,
+    )
+    .0
+}
+
+/// Send files or directories to the peer.
+///
+/// `path` is what to send: a local path when `isRemote` is false, a path on the peer when it is
+/// true, which is why one call serves both directions. `to` is the destination directory on the
+/// receiving side. `fileNum` is how many entries the path expands to, which the core needs up
+/// front so progress can be reported against a denominator.
+#[napi(js_name = "sessionSendFiles")]
+pub fn session_send_files(
+    session_id: String,
+    act_id: i32,
+    path: String,
+    to: String,
+    file_num: i32,
+    include_hidden: bool,
+    is_remote: bool,
+) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_send_files(
+            session_id, act_id, path, to, file_num, include_hidden, is_remote, false,
+        );
+    }
+}
+
+/// List a directory on the peer. The reply arrives as an event, not as a return value.
+#[napi(js_name = "sessionReadRemoteDir")]
+pub fn session_read_remote_dir(session_id: String, path: String, include_hidden: bool) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_read_remote_dir(session_id, path, include_hidden);
+    }
+}
+
+/// List a local directory, returned directly as JSON.
+///
+/// Local listing is synchronous on this side, unlike the remote one: there is no round trip to
+/// wait for, which is why it has its own call rather than sharing the event path.
+#[napi(js_name = "sessionReadLocalDirSync")]
+pub fn session_read_local_dir_sync(session_id: String, path: String, show_hidden: bool) -> String {
+    let Some(session_id) = parse_session(&session_id) else {
+        return String::new();
+    };
+    librustdesk::flutter_ffi::session_read_local_dir_sync(session_id, path, show_hidden)
+}
+
+/// Create a directory on the peer, or locally, depending on `isRemote`.
+#[napi(js_name = "sessionCreateDir")]
+pub fn session_create_dir(session_id: String, act_id: i32, path: String, is_remote: bool) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_create_dir(session_id, act_id, path, is_remote);
+    }
+}
+
+/// Delete a file on the peer, or locally, depending on `isRemote`.
+#[napi(js_name = "sessionRemoveFile")]
+pub fn session_remove_file(session_id: String, act_id: i32, path: String, file_num: i32, is_remote: bool) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_remove_file(session_id, act_id, path, file_num, is_remote);
+    }
+}
+
+/// Delete a directory and everything in it.
+///
+/// The core scans the directory first and reports what it found, then removes it once the front
+/// end confirms -- so this starts a two-step operation rather than deleting immediately.
+#[napi(js_name = "sessionRemoveDirAll")]
+pub fn session_remove_dir_all(session_id: String, act_id: i32, path: String, is_remote: bool, show_hidden: bool) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_read_dir_to_remove_recursive(
+            session_id, act_id, path, is_remote, show_hidden,
+        );
+    }
+}
+
+/// Rename a file on the peer, or locally, depending on `isRemote`.
+#[napi(js_name = "sessionRenameFile")]
+pub fn session_rename_file(session_id: String, act_id: i32, path: String, new_name: String, is_remote: bool) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_rename_file(session_id, act_id, path, new_name, is_remote);
+    }
+}
+
+/// Answer the peer's request to overwrite an existing destination file.
+///
+/// The core asks rather than deciding, so without an answer a transfer that collides with an
+/// existing file waits indefinitely. `remember` applies the answer to the rest of the batch
+/// instead of asking again for every file.
+#[napi(js_name = "sessionSetConfirmOverrideFile")]
+pub fn session_set_confirm_override_file(
+    session_id: String,
+    act_id: i32,
+    file_num: i32,
+    need_override: bool,
+    remember: bool,
+    is_upload: bool,
+) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_set_confirm_override_file(
+            session_id, act_id, file_num, need_override, remember, is_upload,
+        );
+    }
+}

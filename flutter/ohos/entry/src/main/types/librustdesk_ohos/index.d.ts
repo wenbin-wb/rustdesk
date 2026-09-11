@@ -108,6 +108,33 @@ export const sessionInputString: (sessionId: string, value: string) => void;
 export const clipboardTakePending: () => string;
 export const clipboardSend: (text: string) => string;
 
+// File transfer. A transfer is its own session kind, registered with sessionAddFileTransfer;
+// operations after that are per-request, keyed by an actId the caller allocates, and the core
+// answers with events on the UI queue rather than by returning from these calls.
+export const sessionAddFileTransfer: (sessionId: string, id: string, password: string) => string;
+export const sessionSendFiles: (
+  sessionId: string, actId: number, path: string, to: string,
+  fileNum: number, includeHidden: boolean, isRemote: boolean
+) => void;
+export const sessionReadRemoteDir: (sessionId: string, path: string, includeHidden: boolean) => void;
+/** Local listing returns synchronously; there is no round trip to wait for. */
+export const sessionReadLocalDirSync: (sessionId: string, path: string, showHidden: boolean) => string;
+export const sessionCreateDir: (sessionId: string, actId: number, path: string, isRemote: boolean) => void;
+export const sessionRemoveFile: (
+  sessionId: string, actId: number, path: string, fileNum: number, isRemote: boolean
+) => void;
+/** Scans the directory first and reports; the removal follows once the caller confirms. */
+export const sessionRemoveDirAll: (
+  sessionId: string, actId: number, path: string, isRemote: boolean, showHidden: boolean
+) => void;
+export const sessionRenameFile: (
+  sessionId: string, actId: number, path: string, newName: string, isRemote: boolean
+) => void;
+export const sessionSetConfirmOverrideFile: (
+  sessionId: string, actId: number, fileNum: number,
+  needOverride: boolean, remember: boolean, isUpload: boolean
+) => void;
+
 // Rendering
 export const getNextTextureKey: () => number;
 
