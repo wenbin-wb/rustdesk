@@ -591,21 +591,14 @@ export struct AddressBookTab {
   @Builder
   private buildFilterSheet() {
     Column({ space: 14 }) {
-      Row() {
-        Text('筛选')
-          .fontSize($r('app.float.font_title'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_title'))
-        Blank()
-        Text('重置')
-          .fontSize($r('app.float.font_body'))
-          .fontColor($r('app.color.brand'))
-          .onClick(() => {
-            this.draftBook = this.bookNames.length > 1 ? 0 : -1;
-            this.draftTags = [];
-          })
-      }
-      .width('100%')
+      // Title only. The sheet's own close control sits in this corner, so nothing else may be
+      // placed here -- a reset link alongside it collided with the close button, both of them
+      // occupying the same few dozen pixels.
+      Text('筛选')
+        .fontSize($r('app.float.font_title'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_title'))
+        .width('100%')
 
       Scroll() {
         Column({ space: 14 }) {
@@ -666,6 +659,19 @@ export struct AddressBookTab {
           this.bookFilter = this.draftBook;
           this.tagFilter = this.draftTags.slice(0);
           this.sheetOpen = false;
+        })
+
+      // Reset lives here rather than beside the title: the sheet's own close control occupies that
+      // corner, and a link placed there overlapped it. Down here it also reads as what it is -- an
+      // action that undoes choices rather than one that confirms them.
+      Button('重置')
+        .width('100%')
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .fontColor($r('app.color.text_secondary'))
+        .onClick(() => {
+          this.draftBook = this.bookNames.length > 1 ? 0 : -1;
+          this.draftTags = [];
         })
     }
     .width('100%')
@@ -854,24 +860,40 @@ export struct AddressBookTab {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
-        // The tags, as coloured dots rather than text. A device can carry several, and spelling
-        // them out would take the line the device's own name needs; the colour is what a user
-        // recognises at a glance, and the full names are in the row's menu.
+        // The tags, each as its own colour followed by its name.
+        //
+        // The colour alone is not enough. The desktop client shows bare dots and puts the names in
+        // a tooltip, but a tooltip is a hover affordance and is deliberately empty on the mobile
+        // client -- so on a phone the dots are all a user ever sees, and a device carrying two tags
+        // gives no way to tell which colour means which. Pairing each colour with its name is what
+        // makes the colour useful rather than decorative.
         if (peer.tags.length > 0) {
-          Row({ space: 4 }) {
-            ForEach(peer.tags.slice(0, TAG_DOTS_MAX), (tag: string) => {
-              Circle()
-                .width(7)
-                .height(7)
-                .fill(this.tagColors[tag] ?? derivedTagColor(tag))
+          Row({ space: 8 }) {
+            ForEach(peer.tags.slice(0, TAG_NAMES_MAX), (tag: string) => {
+              Row({ space: 3 }) {
+                Circle()
+                  .width(7)
+                  .height(7)
+                  .fill(this.tagColors[tag] ?? derivedTagColor(tag))
+                  .flexShrink(0)
+                Text(tag)
+                  .fontSize($r('app.float.font_caption'))
+                  .fontColor($r('app.color.text_secondary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .constraintSize({ maxWidth: 150 })
+              .flexShrink(1)
             }, (tag: string) => tag)
-            if (peer.tags.length > TAG_DOTS_MAX) {
-              Text(`+${peer.tags.length - TAG_DOTS_MAX}`)
+            if (peer.tags.length > TAG_NAMES_MAX) {
+              Text(`+${peer.tags.length - TAG_NAMES_MAX}`)
                 .fontSize($r('app.float.font_caption'))
                 .fontColor($r('app.color.text_hint'))
+                .flexShrink(0)
             }
           }
-          .margin({ top: 2 })
+          .margin({ top: 3 })
+          .width('100%')
         }
       }
       .layoutWeight(1)
@@ -1002,8 +1024,13 @@ function platformIcon(platform: string): Resource {
 
 /** The tag list's first entry, standing for devices with no tags at all. */
 const UNTAGGED = '__untagged__';
-/** How many tag dots fit on a card before the rest are counted. */
-const TAG_DOTS_MAX = 5;
+/**
+ * How many tags are named on a card before the rest are counted.
+ *
+ * Two rather than the five dots that fitted before: a name takes far more room than a dot, and the
+ * remainder is still reachable through the count and the row's menu.
+ */
+const TAG_NAMES_MAX = 2;
 
 /**
  * The colours a tag without a colour of its own is drawn in.
