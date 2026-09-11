@@ -172,7 +172,7 @@ export struct AddressBookTab {
       if (this.bookFilter >= this.bookNames.length) {
         this.bookFilter = this.bookNames.length > 1 ? 0 : -1;
       }
-      if (this.tagFilter.some((i: number) => i >= this.tagNames.length)) {
+      if (this.tagFilter.some((i: number) => i > this.tagNames.length + 1)) {
         this.tagFilter = [];
       }
     } catch (e) {
@@ -306,14 +306,23 @@ export struct AddressBookTab {
     return out;
   }
 
-  /** The selected tag names, translating the untagged entry to the empty name it stands for. */
+  /**
+   * The selected tag names.
+   *
+   * Chip index 0 is "all" and selects nothing, 1 is the untagged entry, and real tags start at 2 --
+   * the leading entries are what make those choices expressible, since the chip group only reports
+   * positions.
+   */
   private selectedTagNames(): string[] {
     const out: string[] = [];
     for (const index of this.tagFilter) {
       if (index === 0) {
+        continue;
+      }
+      if (index === 1) {
         out.push(UNTAGGED);
-      } else if (index - 1 < this.tagNames.length) {
-        out.push(this.tagNames[index - 1]);
+      } else if (index - 2 < this.tagNames.length) {
+        out.push(this.tagNames[index - 2]);
       }
     }
     return out;
@@ -549,10 +558,14 @@ export struct AddressBookTab {
       out.push(this.bookNames[this.bookFilter]);
     }
     for (const index of this.tagFilter) {
+      // Chip 0 is "all", which is the absence of a filter and so is never shown as one.
       if (index === 0) {
+        continue;
+      }
+      if (index === 1) {
         out.push('未分类');
-      } else if (index - 1 < this.tagNames.length) {
-        out.push(this.tagNames[index - 1]);
+      } else if (index - 2 < this.tagNames.length) {
+        out.push(this.tagNames[index - 2]);
       }
     }
     return out;
@@ -571,8 +584,10 @@ export struct AddressBookTab {
     }
     const next: number[] = [];
     for (const index of this.tagFilter) {
-      const isUntagged = index === 0;
-      const name = isUntagged ? '未分类' : (this.tagNames[index - 1] ?? '');
+      if (index === 0) {
+        continue;
+      }
+      const name = index === 1 ? '未分类' : (this.tagNames[index - 2] ?? '');
       if (name !== label) {
         next.push(index);
       }
@@ -630,16 +645,36 @@ export struct AddressBookTab {
                 .fontSize($r('app.float.font_caption'))
                 .fontColor($r('app.color.text_secondary'))
                 .width('100%')
-              // Multi-select, and the chips wrap here rather than scrolling away.
-              ChipGroup({
-                items: this.tagChipItems(),
-                selectedIndexes: this.draftTags,
-                multiple: true,
-                onChange: (indexes: Array<number>) => {
-                  this.draftTags = indexes;
+              // A list rather than a ChipGroup, because ChipGroup cannot colour anything: its own
+              // LabelOptions carries only `text` and its icon options only `src` and `size`. The
+              // colour is the whole point here -- it is the key to the dots on the cards -- so each
+              // choice is composed from the platform's own parts instead: a dot for the colour, the
+              // tag's name, and a Checkbox for the selection, which also brings the accessible
+              // semantics a hand-built toggle would lack.
+              ForEach(this.tagChoiceLabels(), (label: string) => {
+                Row({ space: 10 }) {
+                  Circle()
+                    .width(10)
+                    .height(10)
+                    .fill(this.tagChoiceColor(label))
+                    .flexShrink(0)
+                  Text(label)
+                    .fontSize($r('app.float.font_body'))
+                    .fontColor($r('app.color.text_title'))
+                    .layoutWeight(1)
+                  Checkbox()
+                    .select(this.draftTags.indexOf(this.tagChoiceIndex(label)) >= 0)
+                    .selectedColor($r('app.color.brand'))
+                    .onChange(() => {
+                      this.toggleDraftTag(this.tagChoiceIndex(label));
+                    })
                 }
-              })
                 .width('100%')
+                .padding({ top: 2, bottom: 2 })
+                .onClick(() => {
+                  this.toggleDraftTag(this.tagChoiceIndex(label));
+                })
+              }, (label: string) => label)
             }
             .width('100%')
           }
@@ -650,33 +685,61 @@ export struct AddressBookTab {
       .align(Alignment.Top)
       .scrollBar(BarState.Off)
 
-      Button(`查看 ${this.draftMatchCount()} 个设备`)
-        .width('100%')
-        .height(44)
-        .backgroundColor($r('app.color.brand'))
-        .fontColor(Color.White)
-        .onClick(() => {
-          this.bookFilter = this.draftBook;
-          this.tagFilter = this.draftTags.slice(0);
-          this.sheetOpen = false;
-        })
+      // Reset sits beside the confirm action rather than on a line of its own or in the title bar.
+      // The title corner is taken by the sheet's own close control -- a link placed there
+      // overlapped it -- and a lone full-width button under the primary one read as a second
+      // equally-weighted choice when it is only an undo. It appears only while there is something
+      // to undo, so the ordinary case is a single clear action.
+      Row({ space: 12 }) {
+        if (this.draftDirty()) {
+          Button('重置')
+            .width(96)
+            .height(44)
+            .backgroundColor($r('app.color.bg_subtle'))
+            .fontColor($r('app.color.text_secondary'))
+            .onClick(() => {
+              this.draftBook = this.bookNames.length > 1 ? 0 : -1;
+              this.draftTags = [];
+            })
+        }
 
-      // Reset lives here rather than beside the title: the sheet's own close control occupies that
-      // corner, and a link placed there overlapped it. Down here it also reads as what it is -- an
-      // action that undoes choices rather than one that confirms them.
-      Button('重置')
-        .width('100%')
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .fontColor($r('app.color.text_secondary'))
-        .onClick(() => {
-          this.draftBook = this.bookNames.length > 1 ? 0 : -1;
-          this.draftTags = [];
-        })
+        Button(`查看 ${this.draftMatchCount()} 个设备`)
+          .layoutWeight(1)
+          .height(44)
+          .backgroundColor($r('app.color.brand'))
+          .fontColor(Color.White)
+          .onClick(() => {
+            this.bookFilter = this.draftBook;
+            this.tagFilter = this.draftTags.slice(0);
+            this.sheetOpen = false;
+          })
+      }
+      .width('100%')
     }
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 20 })
+  }
+
+  /**
+   * Whether the draft differs from what is applied.
+   *
+   * Drives whether the reset action is offered at all: a control that would do nothing is worse
+   * than no control, and this is the one place it is unambiguous.
+   */
+  private draftDirty(): boolean {
+    if (this.draftBook !== this.bookFilter) {
+      return true;
+    }
+    if (this.draftTags.length !== this.tagFilter.length) {
+      return true;
+    }
+    for (const index of this.draftTags) {
+      if (this.tagFilter.indexOf(index) < 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** How many devices the draft selection would leave, so the button is not a leap of faith. */
@@ -709,12 +772,60 @@ export struct AddressBookTab {
     return items;
   }
 
-  private tagChipItems(): ChipGroupItemOptions[] {
-    const items: ChipGroupItemOptions[] = [{ label: { text: '未分类' } } as ChipGroupItemOptions];
+  /**
+   * The tag choices, in the order they are shown: all, untagged, then each tag.
+   *
+   * The names are the labels; the position in this list is what the selection stores, so the two
+   * have to be derived from one another rather than kept as parallel tables that can drift.
+   */
+  private tagChoiceLabels(): string[] {
+    const out: string[] = ['全部', '未分类'];
     for (const tag of this.filterableTags()) {
-      items.push({ label: { text: tag } } as ChipGroupItemOptions);
+      out.push(tag);
     }
-    return items;
+    return out;
+  }
+
+  /** The selection index a label stands for. */
+  private tagChoiceIndex(label: string): number {
+    return this.tagChoiceLabels().indexOf(label);
+  }
+
+  /**
+   * The colour shown beside a choice: each tag's own, and the palette's neutral for the two entries
+   * that are not tags.
+   */
+  private tagChoiceColor(label: string): ResourceColor {
+    if (label === '全部' || label === '未分类') {
+      return $r('app.color.text_hint');
+    }
+    return this.tagColors[label] ?? derivedTagColor(label);
+  }
+
+  /**
+   * Turn one tag choice on or off.
+   *
+   * Choosing "all" clears the rest, because it stands for the absence of a filter and holding it
+   * alongside a tag would mean two contradictory things at once.
+   */
+  private toggleDraftTag(index: number): void {
+    if (index === 0) {
+      this.draftTags = [];
+      return;
+    }
+    const next: number[] = [];
+    let found = false;
+    for (const existing of this.draftTags) {
+      if (existing === index) {
+        found = true;
+      } else {
+        next.push(existing);
+      }
+    }
+    if (!found) {
+      next.push(index);
+    }
+    this.draftTags = next;
   }
 
   /**
@@ -860,40 +971,27 @@ export struct AddressBookTab {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
-        // The tags, each as its own colour followed by its name.
+        // The tags, as coloured dots only -- the same as the original client's card.
         //
-        // The colour alone is not enough. The desktop client shows bare dots and puts the names in
-        // a tooltip, but a tooltip is a hover affordance and is deliberately empty on the mobile
-        // client -- so on a phone the dots are all a user ever sees, and a device carrying two tags
-        // gives no way to tell which colour means which. Pairing each colour with its name is what
-        // makes the colour useful rather than decorative.
+        // The names would take the room the device's own name needs, and a list is scanned by name.
+        // The dots are read against the filter panel, where every tag is listed with a dot of its
+        // colour beside it; that is where the colour is learned, and it is the only place it needs
+        // to be spelled out.
         if (peer.tags.length > 0) {
-          Row({ space: 8 }) {
-            ForEach(peer.tags.slice(0, TAG_NAMES_MAX), (tag: string) => {
-              Row({ space: 3 }) {
-                Circle()
-                  .width(7)
-                  .height(7)
-                  .fill(this.tagColors[tag] ?? derivedTagColor(tag))
-                  .flexShrink(0)
-                Text(tag)
-                  .fontSize($r('app.float.font_caption'))
-                  .fontColor($r('app.color.text_secondary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              .constraintSize({ maxWidth: 150 })
-              .flexShrink(1)
+          Row({ space: 4 }) {
+            ForEach(peer.tags.slice(0, TAG_DOTS_MAX), (tag: string) => {
+              Circle()
+                .width(7)
+                .height(7)
+                .fill(this.tagColors[tag] ?? derivedTagColor(tag))
             }, (tag: string) => tag)
-            if (peer.tags.length > TAG_NAMES_MAX) {
-              Text(`+${peer.tags.length - TAG_NAMES_MAX}`)
+            if (peer.tags.length > TAG_DOTS_MAX) {
+              Text(`+${peer.tags.length - TAG_DOTS_MAX}`)
                 .fontSize($r('app.float.font_caption'))
                 .fontColor($r('app.color.text_hint'))
-                .flexShrink(0)
             }
           }
-          .margin({ top: 3 })
-          .width('100%')
+          .margin({ top: 4 })
         }
       }
       .layoutWeight(1)
@@ -1024,13 +1122,8 @@ function platformIcon(platform: string): Resource {
 
 /** The tag list's first entry, standing for devices with no tags at all. */
 const UNTAGGED = '__untagged__';
-/**
- * How many tags are named on a card before the rest are counted.
- *
- * Two rather than the five dots that fitted before: a name takes far more room than a dot, and the
- * remainder is still reachable through the count and the row's menu.
- */
-const TAG_NAMES_MAX = 2;
+/** How many tag dots fit on a card before the rest are counted. */
+const TAG_DOTS_MAX = 5;
 
 /**
  * The colours a tag without a colour of its own is drawn in.
