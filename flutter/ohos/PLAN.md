@@ -215,6 +215,40 @@
 - [ ] 无障碍细化：`accessibilityText`、焦点顺序、随系统字体缩放（当前字号用 `fp`，已可随缩放）
 - [x] 页面：首页 / 设备簿 / 设置（登录、服务器、密码对话框沿用既有实现并已资源化）
 
+#### P3b · 对齐官方组件示例（用户要求"UI 要有鸿蒙原生感觉"）
+
+**基准**：[HarmonyOSComponentUXExamples](https://gitcode.com/HarmonyOS_Samples/HarmonyOSComponentUXExamples)（官方 ArkUI 组件示例集）。
+它逐组件给出官方推荐用法，正好暴露了本项目**手搓**的地方。逐项对照如下：
+
+| 位置 | 现状（手搓） | **应改用** | 官方示例路径 |
+|---|---|---|---|
+| **子页签**（最近/局域网） | `Text` + `onClick` + 手改字重/颜色 | **`ChipGroup`**（胶囊样式） | `components/navigation` 子页签 |
+| **标题栏** | `Row{Image+Column+Button}` 手搓 | **`HdsNavDestination` / `EditableTitleBar`** | `components/navigation` 标题栏 |
+| **列表**（设备/最近/局域网） | `Column` + `HdsListItemCard` | **`List`/`ListItem`/`ListItemGroup`**（效率型列表） | `components/container` 列表 |
+| **对话框**（登录/密码/服务器） | `@CustomDialog` + `customStyle` | **`CustomContentDialog` / `SelectDialog` / `TipsDialog`** | `components/container` 弹出框 |
+| **服务器设置** | 普通对话框 | **`bindSheet` 半模态面板**（设置类内容的官方形态） | `components/container` 半模态面板 |
+| **设备 ID 分享** | 无 | **`QRCode`**（桌面端即用二维码分享 ID） | `components/presentation` 二维码 |
+| **地址簿** | 无索引 | **`AlphabetIndexer`**（大地址簿必备，配合 `List`） | `components/presentation` 索引条 |
+| **未读/状态标记** | 无 | **`Badge`** | `components/presentation` 新事件标记 |
+| **操作反馈** | ❌ 无任何反馈机制 | **`promptAction.showToast`** + **`HdsSnackBar`** | `components/presentation` 即时反馈/即时操作 |
+| **文件传输进度** | 无 | **`Progress`**（线性/胶囊/环形） | `components/presentation` 进度条 |
+| **搜索设备** | 无 | **`Search`** | `components/input` 搜索框 |
+| **登录输入框** | 裸 `TextInput` | 官方**文本框样式**（错误态/字符计数/密码样式） | `components/input` 文本框 |
+| **下拉选择**（画质等） | 无 | **`Select`** | `components/action` 下拉选项 |
+| **勾选**（多选删除） | 裸 `Checkbox` | 官方**列表单选/多选**形态 | `components/select` 勾选 |
+| **核心操作栏** | 会话页顶部工具条手搓 | **`HdsActionBar`**（横向/垂直） | `components/action` 核心操作栏 |
+| **菜单** | 无（会话页缺菜单） | **`Menu`/`MenuItem`**（含长按悬浮菜单） | `components/action` 菜单 |
+| **分段按钮** | 无 | **`SegmentButtonV2`** | `components/select` |
+| **数据面板** | 无 | **`DataPanel`** | `components/presentation` 数据可视化 |
+
+**多设备形态**：官方示例覆盖 手机 / 小折叠 / 平板 / 智慧屏 / PC / 穿戴，且底栏示例明确包含
+**"适配分栏布局"**与**"左右结构"** —— 与本项目 `Breakpoint.ets` 的断点切换方向一致，但其做法用的是
+`HdsTabs` 自带的分栏适配能力，应参照替换自绘逻辑。
+
+> **验收口径（用户已明确）**：① **所有功能与 API 全部复刻**（对标 iOS/mobile 端）；
+> ② **UI 贴合鸿蒙官方推荐布局与规范**（以本示例集与官方 design-guides 为准）。
+
+
 > **说明**：`RemoteSessionPage.ets` / `ServerSettingsDialog.ets` / `ConfigStorage.ets` 携带**本次会话之前就存在的未提交改动**（上个 agent 遗留）。因 P3 构建依赖它们，随本次提交一并入库。
 
 ### P4 · 控制端核心链路
