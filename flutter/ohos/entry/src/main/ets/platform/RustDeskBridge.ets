@@ -14,6 +14,13 @@
 
 import nativeModule from 'librustdesk_ohos.so';
 
+/** A decoded frame from the core. */
+export interface RgbaFrame {
+  width: number;
+  height: number;
+  data: ArrayBuffer;
+}
+
 /** Shape of the module built from flutter/ohos/native/src/lib.rs. */
 interface RustDeskNative {
   // --- module identity -------------------------------------------------------
@@ -60,6 +67,19 @@ interface RustDeskNative {
   mainGetError(): string;
   mainGetTemporaryPassword(): string;
   mainUpdateTemporaryPassword(): void;
+
+  sessionAddSync(
+    sessionId: string, id: string,
+    isFileTransfer: boolean, isViewCamera: boolean, isPortForward: boolean,
+    isRdp: boolean, isTerminal: boolean,
+    switchUuid: string, forceRelay: boolean,
+    password: string, isSharedPassword: boolean
+  ): string;
+  sessionStart(sessionId: string, id: string): string;
+  sessionClose(sessionId: string): void;
+  sessionTakeRgba(sessionId: string, display: number): RgbaFrame | undefined;
+  sessionReleaseRgba(sessionId: string, display: number): void;
+  pollUiEvents(): string;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */

@@ -344,8 +344,7 @@ impl Default for VideoRenderer {
 
 impl VideoRenderer {
     #[inline]
-    fn set_size(&mut self, display: usize, width: usize, height: usize) {
-        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+    fn set_size(&mut self, display: usize, width: usize, height: usize) {        let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if let Some(info) = sessions_lock.get_mut(&display) {
             info.size = (width, height);
             info.notify_render_type = None;
@@ -361,6 +360,16 @@ impl VideoRenderer {
                 },
             );
         }
+    }
+
+    /// The size the peer announced for `display`, or (0, 0) if it has not been set.
+    #[inline]
+    fn get_size(&self, display: usize) -> (usize, usize) {
+        self.map_display_sessions
+            .read()
+            .unwrap()
+            .get(&display)
+            .map_or((0, 0), |info| info.size)
     }
 
     fn register_pixelbuffer_texture(&self, display: usize, ptr: usize) {
@@ -1415,8 +1424,149 @@ fn push_ui_event(stream: &Option<StreamSink<EventToUI>>, event: EventToUI) -> bo
 }
 
 #[cfg(target_env = "ohos")]
-fn push_ui_event(stream: &Option<StreamSink<EventToUI>>, _event: EventToUI) -> bool {
-    stream.is_some()
+lazy_static::lazy_static! {
+    /// UI events waiting to be collected by the HarmonyOS front end.
+    ///
+    /// HarmonyOS has no Dart isolate, so there is no `StreamSink` to push into. Events are
+    /// queued here and ArkTS drains them through `flutter_ffi::ohos_poll_ui_events`.
+    ///
+    /// The queue is bounded so a front end that stops polling cannot make the core grow without
+    /// limit; when it is full the oldest event is dropped. That is safe because the pixel path
+    /// does not depend on these events -- ArkTS polls the frame buffer directly -- so a dropped
+    /// event can only lose a status line, never a frame.
+    static ref OHOS_UI_EVENTS: std::sync::Mutex<std::collections::VecDeque<EventToUI>> =
+        Default::default();
+}
+
+#[cfg(target_env = "ohos")]
+const OHOS_UI_EVENT_QUEUE_LIMIT: usize = 256;
+
+#[cfg(target_env = "ohos")]
+fn push_ui_event(_stream: &Option<StreamSink<EventToUI>>, event: EventToUI) -> bool {
+    let mut queue = OHOS_UI_EVENTS.lock().unwrap();
+    if queue.len() >= OHOS_UI_EVENT_QUEUE_LIMIT {
+        queue.pop_front();
+    }
+    queue.push_back(event);
+    // Report accepted. The callers use this to decide whether a frame must travel another way,
+    // and for `EventToUI::Rgba` the answer must be yes: it is what keeps the frame marked valid
+    // for the front end to pick up. Claiming otherwise would make the core clear the frame it
+    // just decoded, which is the one thing that must not happen without a second route.
+    true
+}
+
+/// Take the UI events queued for the front end.
+#[cfg(target_env = "ohos")]
+pub fn ohos_take_ui_events() -> Vec<String> {
+    let mut queue = OHOS_UI_EVENTS.lock().unwrap();
+    let mut out = Vec::with_capacity(queue.len());
+    while let Some(e) = queue.pop_front() {
+        out.push(match e {
+            EventToUI::Event(name) => name,
+            EventToUI::Rgba(display) => format!("rgba:{}", display),
+            EventToUI::Texture(display, ok) => format!("texture:{}:{}", display, ok),
+        });
+    }
+    out
+}
+
+/// Start a session on HarmonyOS.
+///
+/// The same work as `session_start_`, minus the `StreamSink`: HarmonyOS has no Dart isolate, so
+/// there is no stream to attach and events go to the queue above instead. The rest is identical
+/// and deliberately so -- the connection is driven by `io_loop`, and everything the front end
+/// needs afterwards is read back through the frame accessors.
+#[cfg(target_env = "ohos")]
+pub fn session_start_ohos(session_id: &SessionID, id: &str) -> ResultType<()> {
+    let session = match sessions::get_session_by_session_id(session_id) {
+        Some(s) => s,
+        None => bail!("No session with peer id {}", id),
+    };
+    if !session
+        .session_handlers
+        .read()
+        .unwrap()
+        .contains_key(session_id)
+    {
+        bail!(
+            "No session handler with peer id {}, session id: {}",
+            id,
+            session_id
+        );
+    }
+
+    // Start the connection exactly once per session. On Flutter this is keyed off whether a UI
+    // stream was already attached; there is no stream here, so it is tracked explicitly.
+    let first_start = OHOS_STARTED_SESSIONS.lock().unwrap().insert(*session_id);
+    if first_start {
+        log::info!("Session {} start (ohos soft render)", id);
+        let session = (*session).clone();
+        std::thread::spawn(move || {
+            let round = session.connection_round_state.lock().unwrap().new_round();
+            io_loop(session, round);
+        });
+    }
+    Ok(())
+}
+
+/// Forget a session's start state, so a later connect on the same id can start again.
+#[cfg(target_env = "ohos")]
+pub fn ohos_forget_session(session_id: &SessionID) {
+    OHOS_STARTED_SESSIONS.lock().unwrap().remove(session_id);
+}
+
+#[cfg(target_env = "ohos")]
+lazy_static::lazy_static! {
+    /// Sessions whose connection loop has already been spawned.
+    static ref OHOS_STARTED_SESSIONS: std::sync::Mutex<std::collections::HashSet<SessionID>> =
+        Default::default();
+}
+
+/// A decoded frame, copied out for the front end.
+///
+/// Copied rather than lent: the buffer is reused by the video handler as soon as the front end
+/// releases it, so a pointer would be a use-after-free waiting to happen across the N-API
+/// boundary. The release is explicit -- see `ohos_next_rgba`.
+#[cfg(target_env = "ohos")]
+pub struct OhosFrame {
+    pub data: Vec<u8>,
+    pub width: usize,
+    pub height: usize,
+}
+
+/// Copy the frame currently waiting for `display`, if any.
+#[cfg(target_env = "ohos")]
+pub fn ohos_get_rgba(session_id: &SessionID, display: usize) -> Option<OhosFrame> {
+    let session = sessions::get_session_by_session_id(session_id)?;
+    let data = {
+        let rgbas = session.display_rgbas.read().unwrap();
+        let rgba = rgbas.get(&display)?;
+        // `valid` means "decoded and not yet taken by the front end". Reading past it would hand
+        // out the previous frame again, or a buffer the video handler is mid-way through filling.
+        if !rgba.valid || rgba.data.is_empty() {
+            return None;
+        }
+        rgba.data.clone()
+    };
+    let (width, height) = session
+        .session_handlers
+        .read()
+        .unwrap()
+        .get(session_id)
+        .map_or((0, 0), |h| h.renderer.get_size(display));
+    Some(OhosFrame {
+        data,
+        width,
+        height,
+    })
+}
+
+/// Mark the frame as taken, letting the video handler decode the next one.
+#[cfg(target_env = "ohos")]
+pub fn ohos_next_rgba(session_id: &SessionID, display: usize) {
+    if let Some(session) = sessions::get_session_by_session_id(session_id) {
+        session.next_rgba(display);
+    }
 }
 
 #[cfg(not(target_os = "ios"))]

@@ -32,6 +32,8 @@
 #[macro_use]
 extern crate napi_derive_ohos;
 
+use napi_ohos::bindgen_prelude::Buffer;
+
 /// Surface core functions through the bridge unchanged.
 ///
 /// The core's exports keep their `flutter_ffi` names, and the `js_name` attribute maps
@@ -339,4 +341,110 @@ pub fn main_get_temporary_password() -> String {
 #[napi(js_name = "mainUpdateTemporaryPassword")]
 pub fn main_update_temporary_password() {
     librustdesk::flutter_ffi::main_update_temporary_password()
+}
+
+// --- sessions and video -------------------------------------------------------
+//
+// The connection and its picture. Session ids are UUID strings, as everywhere else in this
+// bridge; ArkTS generates one per connect and uses it for every later call.
+
+/// Register a session for `id`. Empty string on success, otherwise the failure message.
+///
+/// `password` is the peer's password and `isSharedPassword` marks it as the peer's one-time
+/// password rather than its permanent one. The remaining flags select the kind of session; the
+/// ordinary remote-desktop case leaves them all false.
+#[napi(js_name = "sessionAddSync")]
+pub fn session_add_sync(
+    session_id: String,
+    id: String,
+    is_file_transfer: bool,
+    is_view_camera: bool,
+    is_port_forward: bool,
+    is_rdp: bool,
+    is_terminal: bool,
+    switch_uuid: String,
+    force_relay: bool,
+    password: String,
+    is_shared_password: bool,
+) -> String {
+    let Some(session_id) = parse_session(&session_id) else {
+        return "invalid session id".to_owned();
+    };
+    // conn_token is optional and unused by the mobile clients.
+    librustdesk::flutter_ffi::session_add_sync(
+        session_id,
+        id,
+        is_file_transfer,
+        is_view_camera,
+        is_port_forward,
+        is_rdp,
+        is_terminal,
+        switch_uuid,
+        force_relay,
+        password,
+        is_shared_password,
+        None,
+    )
+    .0
+}
+
+/// Start connecting. Empty string on success, otherwise the failure message.
+#[napi(js_name = "sessionStart")]
+pub fn session_start(session_id: String, id: String) -> String {
+    let Some(session_id) = parse_session(&session_id) else {
+        return "invalid session id".to_owned();
+    };
+    librustdesk::flutter_ffi::session_start_ohos(session_id, id)
+}
+
+/// Close a session and forget it, so the same id can be used again.
+#[napi(js_name = "sessionClose")]
+pub fn session_close(session_id: String) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_close(session_id);
+        librustdesk::flutter_ffi::session_forget_ohos(session_id);
+    }
+}
+
+/// A decoded frame, ready to become an image.
+#[napi(object)]
+pub struct RgbaFrame {
+    pub width: u32,
+    pub height: u32,
+    /// RGBA, four bytes per pixel, `width * height * 4` long.
+    pub data: Buffer,
+}
+
+/// Copy the frame waiting for `display`, or null when none has arrived.
+///
+/// Copied rather than lent: the buffer belongs to the video handler and is reused as soon as it
+/// is released, so anything else would be a use-after-free across the N-API boundary. Release it
+/// with [`session_release_rgba`] once consumed, or no further frames are decoded.
+#[napi(js_name = "sessionTakeRgba")]
+pub fn session_take_rgba(session_id: String, display: u32) -> Option<RgbaFrame> {
+    let session_id = parse_session(&session_id)?;
+    let frame = librustdesk::flutter::ohos_get_rgba(&session_id, display as usize)?;
+    Some(RgbaFrame {
+        width: frame.width as u32,
+        height: frame.height as u32,
+        data: Buffer::from(frame.data),
+    })
+}
+
+/// Release the frame for `display`, letting the video handler decode the next one.
+#[napi(js_name = "sessionReleaseRgba")]
+pub fn session_release_rgba(session_id: String, display: u32) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_release_rgba(session_id, display as usize);
+    }
+}
+
+/// Drain the core's UI events, as a JSON array of short strings.
+///
+/// HarmonyOS has no Dart stream to receive these, so the front end polls for them. They carry
+/// status only -- the picture comes from [`session_take_rgba`] -- so a missed poll costs a
+/// notification and nothing more.
+#[napi(js_name = "pollUiEvents")]
+pub fn poll_ui_events() -> String {
+    librustdesk::flutter_ffi::ohos_poll_ui_events()
 }

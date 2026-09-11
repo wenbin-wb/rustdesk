@@ -55,6 +55,30 @@ export const mainGetError: () => string;
 export const mainGetTemporaryPassword: () => string;
 export const mainUpdateTemporaryPassword: () => void;
 
+// Sessions and video. Session ids are UUID strings; ArkTS generates one per connect.
+//
+// sessionTakeRgba returns a copy of the frame the core has decoded for a display, or undefined
+// when none is waiting. sessionReleaseRgba must be called once it has been consumed, or the
+// core will not decode the next one -- that handshake is what paces the stream.
+export interface RgbaFrame {
+  width: number;
+  height: number;
+  data: ArrayBuffer;
+}
+
+export const sessionAddSync: (
+  sessionId: string, id: string,
+  isFileTransfer: boolean, isViewCamera: boolean, isPortForward: boolean,
+  isRdp: boolean, isTerminal: boolean,
+  switchUuid: string, forceRelay: boolean,
+  password: string, isSharedPassword: boolean
+) => string;
+export const sessionStart: (sessionId: string, id: string) => string;
+export const sessionClose: (sessionId: string) => void;
+export const sessionTakeRgba: (sessionId: string, display: number) => RgbaFrame | undefined;
+export const sessionReleaseRgba: (sessionId: string, display: number) => void;
+export const pollUiEvents: () => string;
+
 // Rendering
 export const getNextTextureKey: () => number;
 

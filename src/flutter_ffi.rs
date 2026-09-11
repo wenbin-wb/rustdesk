@@ -2294,6 +2294,45 @@ pub fn session_next_rgba(session_id: SessionID, display: usize) -> SyncReturn<()
     SyncReturn(super::flutter::session_next_rgba(session_id, display))
 }
 
+// --- HarmonyOS video and session entry points --------------------------------
+//
+// Flutter gets frames through a shared-memory texture whose pointer is handed to its renderer,
+// which is why the exports above are pointers and sizes only. HarmonyOS has no such renderer, so
+// these copy the frame out instead, and the front end releases it explicitly.
+
+/// Start a session without a Dart event stream. See `flutter::session_start_ohos`.
+#[cfg(target_env = "ohos")]
+pub fn session_start_ohos(session_id: SessionID, id: String) -> String {
+    match super::flutter::session_start_ohos(&session_id, &id) {
+        Ok(()) => String::new(),
+        Err(e) => e.to_string(),
+    }
+}
+
+/// Size in bytes of the frame waiting for `display`, or 0 if there is none.
+#[cfg(target_env = "ohos")]
+pub fn session_get_rgba_len(session_id: SessionID, display: usize) -> usize {
+    super::flutter::ohos_get_rgba(&session_id, display).map_or(0, |f| f.data.len())
+}
+
+/// Release the frame so the video handler decodes the next one.
+#[cfg(target_env = "ohos")]
+pub fn session_release_rgba(session_id: SessionID, display: usize) {
+    super::flutter::ohos_next_rgba(&session_id, display);
+}
+
+/// Drain the UI events queued since the last call.
+#[cfg(target_env = "ohos")]
+pub fn ohos_poll_ui_events() -> String {
+    serde_json::to_string(&super::flutter::ohos_take_ui_events()).unwrap_or_default()
+}
+
+/// Forget a session's start state so a later connect on the same id can start again.
+#[cfg(target_env = "ohos")]
+pub fn session_forget_ohos(session_id: SessionID) {
+    super::flutter::ohos_forget_session(&session_id);
+}
+
 pub fn session_register_pixelbuffer_texture(
     session_id: SessionID,
     display: usize,
