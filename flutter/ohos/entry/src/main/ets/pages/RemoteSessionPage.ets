@@ -1,71 +1,54 @@
-import { getConnectStatus, getLastRemoteId, peerGetSessionsCount } from '../platform/RustDeskBridge';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { VideoSurface } from '../components/VideoSurface';
+import {
+  sessionAdd, sessionStart, sessionClose, pollUiEvents,
+  getConnectStatus, getLastRemoteId, peerGetSessionsCount
+} from '../platform/RustDeskBridge';
 
 const DOMAIN = 0x0000;
 const TAG = 'RustDeskSession';
 
-/**
- * Describe the value the core reports as its connection status.
- *
- * On this platform main_get_connect_status does not return a connection state machine. Its
- * ohos/android/ios arm returns hbb_common::config::get_online_state() -- the highest known
- * online state of the peers that have been queried -- with anything above zero collapsed to 1,
- * so the value is 0 (not established) or 1 (at least one queried peer is online). The wording
- * below says that, rather than inventing connect/probe/handshake phases the core does not
- * report here.
- */
-function describeStatus(raw: string): string {
-  if (!raw || raw.length === 0) {
-    return '';
-  }
-  try {
-    const parsed = JSON.parse(raw) as Record<string, number>;
-    const num = parsed['status_num'];
-    if (typeof num === 'number') {
-      if (num <= 0) {
-        return '未确认对端在线';
-      }
-      return '对端在线';
-    }
-  } catch (e) {
-    // Not the shape we expect; show what the core actually said rather than hiding it.
-  }
-  return raw;
-}
+/** How often the core's queued status events are drained. */
+const EVENT_POLL_MS = 200;
 
 /**
- * Remote session view.
+ * A remote session: the peer's desktop, with a status strip over it.
  *
- * This page used to load https://rustdesk.com/web/ into a WebView, with a fallback mode that
- * hand-drew a fake desktop on a canvas and logged the taps. Both looked like a session and
- * neither was one: the web client is a separate product that knows nothing about this app's
- * device id or its target, so choosing "connect" opened a web page rather than the peer.
- *
- * Streaming a real session needs the video path (the core's Rgba events into an XComponent
- * surface) and an event channel from the core to ArkTS, which is the P4 work in PLAN.md and
- * is not built yet. Until then this page states that plainly instead of substituting
- * something that resembles a session. It still shows what the core actually reports, so it is
- * usable for checking that the core is running and reachable.
+ * The page owns the session's life. It registers the session with the core, starts the
+ * connection, and tears both down on the way out. The picture is drawn by the core straight into
+ * the surface -- see components/VideoSurface.ets and flutter/ohos/native/src/surface.rs -- so
+ * nothing on this page is per-frame.
  */
-
 @Component
 export struct RemoteSessionPage {
   @Prop targetId: string = '';
+  /** The password the user entered, already checked against the peer by the core. */
+  @Prop password: string = '';
+  /** True when the password is the peer's one-time password rather than its permanent one. */
+  @Prop passwordIsShared: boolean = false;
   onDisconnect?: () => void;
 
-  @State private coreStatus: string = '';
-  @State private lastRemoteId: string = '';
-  @State private sessionCount: number = 0;
-  @State private lastError: string = '';
+  /**
+   * Identifies this session to the core. Generated here and kept for the session's life, because
+   * every later call -- close, video -- is keyed on it.
+   */
+  @State private sessionId: string = '';
+  @State private status: string = '';
+  @State private errorMessage: string = '';
+  @State private remoteId: string = '';
+  @State private peerSessions: number = 0;
+  @State private started: boolean = false;
 
-  /** Polls the core while this page is up; cleared on disappear so it cannot outlive it. */
   private timerId: number = -1;
+  /** Guards against starting twice, which would leave a second connection behind. */
+  private startAttempted: boolean = false;
 
   aboutToAppear(): void {
-    this.refresh();
+    this.sessionId = this.newSessionId();
+    this.beginSession();
     this.timerId = setInterval(() => {
-      this.refresh();
-    }, 1000);
+      this.poll();
+    }, EVENT_POLL_MS);
   }
 
   aboutToDisappear(): void {
@@ -73,173 +56,172 @@ export struct RemoteSessionPage {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+    // Release in the same order the session was built: stop the picture, then the session, then
+    // forget the id so a later connect on the same peer starts clean.
+    if (this.sessionId.length > 0) {
+      sessionClose(this.sessionId);
+      this.sessionId = '';
+    }
   }
 
   /**
-   * Read the core's state.
+   * A v4 UUID, which is what the core's SessionID is.
    *
-   * Guarded as a whole: a throw from the bridge aborts the whole interval tick, so the page
-   * would silently freeze on stale values rather than reporting a problem. That is also the
-   * shape of the crash this app had when the native module failed to load, and a status page
-   * is not worth dying for.
-   *
-   * The core reports the connection status as JSON ({"status_num":N}), so it is parsed for
-   * display rather than shown raw.
+   * Built here rather than pulled from the core because the id has to exist before the session is
+   * registered. `crypto.randomUUID` is not available in ArkTS, so this follows the v4 layout with
+   * the platform's random source.
    */
-  private refresh(): void {
-    try {
-      this.coreStatus = describeStatus(getConnectStatus());
-      this.lastRemoteId = getLastRemoteId();
-      this.sessionCount = peerGetSessionsCount(this.rawTarget(), 0);
-      this.lastError = '';
-    } catch (e) {
-      this.lastError = '核心状态读取失败';
-      hilog.warn(DOMAIN, TAG, 'core state unavailable: %{public}s', JSON.stringify(e));
+  private newSessionId(): string {
+    const bytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
     }
+    // Version 4, variant 1, as the UUID specification requires.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex: string[] = [];
+    for (let i = 0; i < 16; i++) {
+      hex.push((bytes[i] < 16 ? '0' : '') + bytes[i].toString(16));
+    }
+    const h = hex.join('');
+    return `${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}`;
+  }
+
+  /**
+   * Register and start the connection.
+   *
+   * Guarded as a whole: this runs from aboutToAppear, where a throw takes the process down, and
+   * the core reports failures as return values rather than exceptions in any case.
+   */
+  private beginSession(): void {
+    if (this.startAttempted) {
+      return;
+    }
+    this.startAttempted = true;
+    try {
+      const addErr = sessionAdd(this.sessionId, this.rawTarget(), this.password, this.passwordIsShared);
+      if (addErr.length > 0) {
+        this.fail(`无法创建会话：${addErr}`);
+        return;
+      }
+      const startErr = sessionStart(this.sessionId, this.rawTarget());
+      if (startErr.length > 0) {
+        this.fail(`无法发起连接：${startErr}`);
+        return;
+      }
+      this.started = true;
+      this.status = '正在连接…';
+      hilog.info(DOMAIN, TAG, 'session %{public}s started', this.sessionId);
+    } catch (e) {
+      this.fail(`连接失败：${JSON.stringify(e)}`);
+    }
+  }
+
+  private fail(message: string): void {
+    hilog.error(DOMAIN, TAG, '%{public}s', message);
+    this.errorMessage = message;
   }
 
   private rawTarget(): string {
     return this.targetId.replace(/\s+/g, '');
   }
 
+  /**
+   * Read the core's state and drain its queued events.
+   *
+   * Guarded as a whole: a throw here would abort the whole tick and freeze the strip on stale
+   * values rather than reporting the problem.
+   */
+  private poll(): void {
+    try {
+      const events = pollUiEvents();
+      for (const e of events) {
+        if (e === 'close') {
+          this.status = '连接已关闭';
+        } else if (e.startsWith('rgba:')) {
+          // A frame is on its way into the surface; the strip just reports that it arrived.
+          this.status = '已连接';
+        } else if (e.length > 0) {
+          this.status = e;
+        }
+      }
+      this.remoteId = getLastRemoteId();
+      this.peerSessions = peerGetSessionsCount(this.rawTarget(), 0);
+        if (this.rawTarget().length > 0) {
+          const raw = getConnectStatus();
+          if (raw.length > 0 && this.status.length === 0) {
+            this.status = raw;
+          }
+        }
+    } catch (e) {
+      this.errorMessage = '核心状态读取失败';
+      hilog.warn(DOMAIN, TAG, 'core state unavailable: %{public}s', JSON.stringify(e));
+    }
+  }
+
   build() {
-    Column({ space: 16 }) {
-      this.buildHeader()
-      this.buildStatusCard()
-      this.buildPendingCard()
-      Blank()
-      this.buildFooter()
+    Stack({ alignContent: Alignment.Top }) {
+      // The surface fills the page; the strip floats over it.
+      VideoSurface({
+        sessionId: this.started ? this.sessionId : '',
+        display: 0,
+        onError: (message: string) => {
+          this.errorMessage = message;
+        }
+      })
+        .width('100%')
+        .height('100%')
+
+      this.buildStrip()
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-    .backgroundColor($r('app.color.bg_page'))
+    .backgroundColor('#000000')
   }
 
   @Builder
-  private buildHeader() {
-    Row({ space: 10 }) {
-      Column({ space: 4 }) {
-        Text($r('app.string.session_target'))
+  private buildStrip() {
+    Column({ space: 6 }) {
+      Row({ space: 8 }) {
+        Row()
+          .width(8)
+          .height(8)
+          .borderRadius(4)
+          .backgroundColor(this.started ? $r('app.color.status_online') : $r('app.color.status_offline'))
+
+        Text(this.remoteId.length > 0 ? this.remoteId : this.targetId)
           .fontSize($r('app.float.font_caption'))
-          .fontColor($r('app.color.text_secondary'))
-        Text(this.targetId)
-          .fontSize($r('app.float.font_title'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_title'))
+          .fontColor(Color.White)
+
+        Blank()
+
+        Button($r('app.string.session_disconnect'))
+          .fontSize($r('app.float.font_caption'))
+          .height(28)
+          .backgroundColor($r('app.color.status_offline_bg'))
+          .fontColor(Color.White)
+          .borderRadius($r('app.float.radius_control'))
+          .onClick(() => {
+            if (this.onDisconnect) {
+              this.onDisconnect();
+            }
+          })
       }
-      .alignItems(HorizontalAlign.Start)
+      .width('100%')
 
-      Blank()
-
-      Button($r('app.string.session_disconnect'))
-        .fontSize($r('app.float.font_caption'))
-        .height(36)
-        .backgroundColor($r('app.color.status_offline_bg'))
-        .fontColor($r('app.color.danger'))
-        .borderRadius($r('app.float.radius_control'))
-        .onClick(() => {
-          if (this.onDisconnect) {
-            this.onDisconnect();
-          }
-        })
+      if (this.errorMessage.length > 0 || this.status.length > 0) {
+        Text(this.errorMessage.length > 0 ? this.errorMessage : this.status)
+          .fontSize($r('app.float.font_caption'))
+          .fontColor(this.errorMessage.length > 0 ? $r('app.color.warning') : Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
     }
-    .width('100%')
-  }
-
-  @Builder
-  private buildStatusCard() {
-    Column({ space: 10 }) {
-      if (this.lastError.length > 0) {
-        Row() {
-          Text(this.lastError)
-            .fontSize($r('app.float.font_caption'))
-            .fontColor($r('app.color.danger'))
-        }
-        .width('100%')
-        .padding(8)
-        .backgroundColor($r('app.color.status_offline_bg'))
-        .borderRadius($r('app.float.radius_control'))
-      }
-
-      Row() {
-        Text($r('app.string.session_core_status'))
-          .fontSize($r('app.float.font_caption'))
-          .fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text(this.coreStatus.length > 0 ? this.coreStatus : $r('app.string.session_idle'))
-          .fontSize($r('app.float.font_body'))
-          .fontColor($r('app.color.text_body'))
-      }
-      .width('100%')
-
-      Divider().color($r('app.color.divider'))
-
-      Row() {
-        Text($r('app.string.session_last_remote'))
-          .fontSize($r('app.float.font_caption'))
-          .fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text(this.lastRemoteId.length > 0 ? this.lastRemoteId : '—')
-          .fontSize($r('app.float.font_body'))
-          .fontColor($r('app.color.text_body'))
-      }
-      .width('100%')
-
-      Divider().color($r('app.color.divider'))
-
-      Row() {
-        Text($r('app.string.session_peer_sessions'))
-          .fontSize($r('app.float.font_caption'))
-          .fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text(this.sessionCount.toString())
-          .fontSize($r('app.float.font_body'))
-          .fontColor($r('app.color.text_body'))
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor($r('app.color.bg_card'))
+    .width('94%')
+    .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+    .backgroundColor('rgba(29, 33, 41, 0.85)')
     .borderRadius($r('app.float.radius_card'))
-  }
-
-  @Builder
-  private buildPendingCard() {
-    Column({ space: 8 }) {
-      Text($r('app.string.session_pending_title'))
-        .fontSize($r('app.float.font_subtitle'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.warning'))
-        .width('100%')
-      Text($r('app.string.session_pending_body'))
-        .fontSize($r('app.float.font_body'))
-        .fontColor($r('app.color.text_secondary'))
-        .width('100%')
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor($r('app.color.bg_card'))
-    .borderRadius($r('app.float.radius_card'))
-  }
-
-  @Builder
-  private buildFooter() {
-    Row() {
-      Button($r('app.string.common_close'))
-        .layoutWeight(1)
-        .height(44)
-        .fontSize($r('app.float.font_body'))
-        .backgroundColor($r('app.color.bg_subtle'))
-        .fontColor($r('app.color.text_body'))
-        .borderRadius($r('app.float.radius_control'))
-        .onClick(() => {
-          if (this.onDisconnect) {
-            this.onDisconnect();
-          }
-        })
-    }
-    .width('100%')
+    .margin({ top: 12 })
   }
 }

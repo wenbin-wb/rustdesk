@@ -80,6 +80,11 @@ interface RustDeskNative {
   sessionTakeRgba(sessionId: string, display: number): RgbaFrame | undefined;
   sessionReleaseRgba(sessionId: string, display: number): void;
   pollUiEvents(): string;
+  videoSurfaceAttach(surfaceId: string): string;
+  videoStart(sessionId: string, display: number): string;
+  videoStop(): void;
+  videoSurfaceDetach(): void;
+  videoIsAttached(): boolean;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -221,6 +226,69 @@ export function getTemporaryPassword(): string {
 /** Invalidate the current one-time password and generate a new one. */
 export function updateTemporaryPassword(): void {
   native.mainUpdateTemporaryPassword();
+}
+
+// --- sessions and video -------------------------------------------------------
+
+/** What went wrong, or empty on success. The core reports failures as strings. */
+export type CoreResult = string;
+
+/**
+ * Register a session with the core.
+ *
+ * `password` authorises the connection; `isSharedPassword` says it is the peer's one-time
+ * password rather than its permanent one.
+ */
+export function sessionAdd(sessionId: string, id: string,
+                           password: string, isSharedPassword: boolean): CoreResult {
+  return native.sessionAddSync(
+    sessionId, id,
+    false, false, false, false, false,
+    '', false,
+    password, isSharedPassword
+  );
+}
+
+/** Start connecting. Returns what went wrong, or empty on success. */
+export function sessionStart(sessionId: string, id: string): CoreResult {
+  return native.sessionStart(sessionId, id);
+}
+
+/** Close the session and release it, so the same id can be used again. */
+export function sessionClose(sessionId: string): void {
+  native.sessionClose(sessionId);
+}
+
+/** Drain the core's UI events. They carry status only; the picture comes from the surface. */
+export function pollUiEvents(): string[] {
+  const raw = native.pollUiEvents();
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+  try {
+    return JSON.parse(raw) as string[];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Bind the surface an XComponent created and start drawing into it.
+ *
+ * Returns what went wrong, or empty on success. Frames do not come back through ArkTS -- the
+ * core writes them straight into the surface -- so this is the whole per-session video setup.
+ */
+export function videoAttachAndStart(surfaceId: string, sessionId: string, display: number): CoreResult {
+  const err = native.videoSurfaceAttach(surfaceId);
+  if (err.length > 0) {
+    return err;
+  }
+  return native.videoStart(sessionId, display);
+}
+
+/** Stop drawing and release the surface. */
+export function videoDetach(): void {
+  native.videoSurfaceDetach();
 }
 
 /** Whether the given session is currently being recorded. */

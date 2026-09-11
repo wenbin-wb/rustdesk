@@ -121,6 +121,14 @@ struct Index {
   @State private passwordOpenRevision: number = 0;
 
   /**
+   * The password to authorise the session with.
+   *
+   * Set from the dialog, or from the store when the peer has a remembered one. Held here because
+   * the session page is built from this page's state and the core needs the value at that point.
+   */
+  @State private sessionPassword: string = '';
+
+  /**
    * Held as a member, not as a local.
    *
    * This dialog used to be built into a local `const controller` inside the open method. The
@@ -230,7 +238,9 @@ struct Index {
       return config.getPeerPassword(rawId);
     }).then((saved: string) => {
       if (saved.length > 0) {
-        // Already authorised for this peer, so go straight through.
+        // Already authorised for this peer, so go straight through. The stored password is what
+        // the core will authorise with, so it has to travel with the session.
+        this.sessionPassword = saved;
         this.isInRemoteSession = true;
         return;
       }
@@ -266,6 +276,9 @@ struct Index {
   private handlePasswordVerified(password: string, remember: boolean): void {
     const config = ConfigManager.getInstance();
     const rawId = this.connectedTargetId.replace(/\s+/g, '');
+    // Hand the password to the session: the core needs it to authorise the connection, and this
+    // is the only place it is available in clear.
+    this.sessionPassword = password;
     const save = remember
       ? config.savePeerPassword(rawId, password)
       : config.removePeerPassword(rawId);
@@ -305,6 +318,7 @@ struct Index {
       if (this.isInRemoteSession) {
         RemoteSessionPage({
           targetId: this.connectedTargetId,
+          password: this.sessionPassword,
           onDisconnect: () => {
             this.isInRemoteSession = false;
           }

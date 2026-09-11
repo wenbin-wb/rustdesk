@@ -79,6 +79,14 @@ export const sessionTakeRgba: (sessionId: string, display: number) => RgbaFrame 
 export const sessionReleaseRgba: (sessionId: string, display: number) => void;
 export const pollUiEvents: () => string;
 
+// Video surface. The XComponent hands out a surface and Rust writes frames into it directly, so
+// no frame crosses this boundary -- which is why there is no per-frame call here.
+export const videoSurfaceAttach: (surfaceId: string) => string;
+export const videoStart: (sessionId: string, display: number) => string;
+export const videoStop: () => void;
+export const videoSurfaceDetach: () => void;
+export const videoIsAttached: () => boolean;
+
 // Rendering
 export const getNextTextureKey: () => number;
 
