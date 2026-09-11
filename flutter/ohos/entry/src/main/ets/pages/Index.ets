@@ -491,6 +491,10 @@ struct Index {
         // without bound or scroll as one oversized row.
         AddressBookTab({
           peersRevision: this.peersRevision,
+          // The bar floats over the content, so the list needs room at its end. Passed in rather
+          // than padded onto the container: the list has to reach the screen edge for its content
+          // to pass under the bar, which is what the bar's translucent material is for.
+          contentBottomInset: usesSideNavigation(this.breakpoint) ? 24 : 104,
           onConnect: (targetId: string) => {
             this.beginConnect(targetId);
           }
@@ -548,10 +552,13 @@ struct Index {
     .width('100%')
     .layoutWeight(1)
     .padding({
+      // The address book manages its own bottom room through the list's content offset, so the
+      // container must not also inset it -- doing both would leave a band of empty background
+      // under the last card, with the floating bar over it.
       left: index === 1 ? pagePadding(this.breakpoint) : 0,
       right: index === 1 ? pagePadding(this.breakpoint) : 0,
       top: index === 1 ? 12 : 0,
-      bottom: index === 1 ? (usesSideNavigation(this.breakpoint) ? 24 : 104) : 0
+      bottom: 0
     })
   }
 }

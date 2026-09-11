@@ -60,6 +60,16 @@ const TAB_RECENT = 2;
 export struct AddressBookTab {
   @Prop @Watch('onRevisionChanged') peersRevision: number = 0;
 
+  /**
+   * How much room to leave at the end of the list for the floating bar.
+   *
+   * Supplied by the page because it depends on the layout band: the bar is taller at the bottom of
+   * a phone than it is on the side of a tablet. It is applied as a list content offset rather than
+   * as padding on the container, so the list still runs to the screen edge and its content passes
+   * under the bar.
+   */
+  @Prop contentBottomInset: number = 104;
+
   onConnect: (targetId: string) => void = () => {};
 
   @State private groups: PeerGroup[] = [];
@@ -401,6 +411,11 @@ export struct AddressBookTab {
     // The cards carry their own background, so the list must not paint over the gaps between
     // them -- a list background here is what turned the spacing invisible.
     .backgroundColor(Color.Transparent)
+    // Room for the floating bar, added INSIDE the list rather than by shrinking it. The list still
+    // reaches the bottom of the screen, so cards scroll underneath the bar and its translucent
+    // material has content to blur -- which is the whole point of a floating bar. Insetting the
+    // container instead left the bar sitting over empty background, where it read as a solid band.
+    .contentEndOffset(this.contentBottomInset)
   }
 
   /** The actions revealed by sliding a row. */
