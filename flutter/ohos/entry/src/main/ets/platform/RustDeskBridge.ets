@@ -288,7 +288,12 @@ export const LOCAL_OPTION_ACCESS_TOKEN = 'access_token';
 
 // --- address book -------------------------------------------------------------
 
-/** One entry in the account's address book. */
+/**
+ * One entry in the account's address book.
+ *
+ * The shape is the core's `Peer`, which the UI reads back by these exact names; a field missing
+ * here is a field the peer list will show as blank.
+ */
 export interface AbPeer {
   id: string;
   username: string;
@@ -296,6 +301,12 @@ export interface AbPeer {
   alias: string;
   platform: string;
   tags: string[];
+  /** The account that owns the device. */
+  loginName?: string;
+  /** The group the device belongs to, as the account organises it. */
+  device_group_name?: string;
+  /** A note on the device, from the account. */
+  note?: string;
   /** Whether this peer is favourited, as the core stores it. */
   favorite?: boolean;
 }

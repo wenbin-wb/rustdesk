@@ -90,26 +90,56 @@ interface SharedProfile {
   name?: string;
 }
 
-/** `/api/ab/peers`, one peer. */
+/** `/api/ab/peers`, one peer, as the server nests it. */
 interface ServerPeer {
   id?: string;
-  username?: string;
-  hostname?: string;
-  alias?: string;
-  platform?: string;
-  tags?: string[];
+  /** Device details. The peer's name, OS and hostname are all in here, not at the top level. */
+  info?: ServerPeerInfo;
+  /** The account that owns the device. */
+  user_name?: string;
+  device_group_name?: string;
+  note?: string;
 }
 
-/** `/api/ab/peers` */
-interface PeersReply {
-  peers?: ServerPeer[];
+/** The `info` object inside a peer. */
+interface ServerPeerInfo {
+  username?: string;
+  /** An OS string such as "Windows 11 / 10.0.22631", which maps to a platform constant. */
+  os?: string;
+  device_name?: string;
+}
+
+/**
+ * The paged shape every address-book list endpoint uses.
+ *
+ * `total` is the count across all pages, which is what tells the caller whether to ask again, and
+ * `data` is this page. Both list endpoints return this, so one interface covers them.
+ */
+interface PagedReply<T> {
+  total?: number;
+  data?: T[];
   error?: string;
 }
 
-/** `/api/ab/peers` request body. */
-interface PeersRequest {
-  guid: string;
-}
+/** `/api/ab/shared/profiles` */
+type SharedProfilesReply = PagedReply<SharedProfile>;
+
+/** `/api/ab/peers` */
+type PeersReply = PagedReply<ServerPeer>;
+
+/** The page size the desktop client uses; the server caps and defaults its own. */
+const PAGE_SIZE = 100;
+/** A ceiling on pages, so a server reporting a nonsense total cannot spin this forever. */
+const MAX_PAGES = 50;
+
+/**
+ * What the core calls the account's own address book.
+ *
+ * The name is not decoration: the core and the UI both recognise the personal book by exactly this
+ * string, and a book named anything else is treated as a shared one. The desktop client uses the
+ * same constant.
+ */
+const PERSONAL_BOOK_NAME = 'My address book';
 
 /**
  * Sign in, then adopt the account's address book.
@@ -281,22 +311,21 @@ export async function syncAddressBook(): Promise<SyncResult> {
     const entries: AbEntry[] = [];
     const personalGuid = personal.guid ?? '';
     if (personalGuid.length > 0) {
-      entries.push(await loadBook(base, token, personalGuid, 'personal'));
+      // Named exactly what the core calls the personal book, or it is treated as a shared one.
+      entries.push(await loadBook(base, token, personalGuid, PERSONAL_BOOK_NAME));
     }
 
     // Books shared with the account, each fetched by its own guid.
     const sharedReply = await post(`${base}/api/ab/shared/profiles`, token);
     if (sharedReply.ok) {
-      const profiles = JSON.parse(sharedReply.text) as SharedProfile[];
-      if (Array.isArray(profiles)) {
-        for (const profile of profiles) {
-          const guid = profile.guid ?? '';
-          if (guid.length === 0) {
-            continue;
-          }
-          const name = profile.name && profile.name.length > 0 ? profile.name : 'shared';
-          entries.push(await loadBook(base, token, guid, name));
+      const profiles = pageOf<SharedProfile>(sharedReply, 'profiles');
+      for (const profile of profiles) {
+        const guid = profile.guid ?? '';
+        if (guid.length === 0) {
+          continue;
         }
+        const name = profile.name && profile.name.length > 0 ? profile.name : 'shared';
+        entries.push(await loadBook(base, token, guid, name));
       }
     }
 
@@ -317,30 +346,108 @@ export async function syncAddressBook(): Promise<SyncResult> {
   }
 }
 
+/**
+ * Every page of a paged address-book list.
+ *
+ * These endpoints take their parameters as query strings and answer with `{total, data}`, so this
+ * walks the pages until the running count reaches the total the server reported. `ab` names which
+ * book to read and is omitted for the endpoint that lists books.
+ */
+async function fetchPaged<T>(url: string, token: string, ab?: string): Promise<T[]> {
+  const out: T[] = [];
+  let total = 0;
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    let full = `${url}?current=${page}&pageSize=${PAGE_SIZE}`;
+    if (ab && ab.length > 0) {
+      full += `&ab=${encodeURIComponent(ab)}`;
+    }
+    const reply = await post(full, token, undefined, false);
+    if (!reply.ok) {
+      break;
+    }
+    let parsed: PagedReply<T>;
+    try {
+      parsed = JSON.parse(reply.text) as PagedReply<T>;
+    } catch (e) {
+      break;
+    }
+    if (page === 1) {
+      // The total is only meaningful once; later pages repeat it.
+      total = parsed.total ?? 0;
+    }
+    const data = parsed.data ?? [];
+    for (const item of data) {
+      out.push(item);
+    }
+    // Stop when everything the server counted has been read. A page shorter than the page size
+    // also means the end, which covers a server that does not report a total at all.
+    if (data.length === 0 || out.length >= total || data.length < PAGE_SIZE) {
+      break;
+    }
+  }
+  return out;
+}
+
 /** One book's peers, in the core's entry shape. */
 async function loadBook(base: string, token: string, guid: string, name: string): Promise<AbEntry> {
   const peers: AbPeer[] = [];
-  const request: PeersRequest = { guid: guid };
-  const reply = await post(`${base}/api/ab/peers`, token, request);
-  if (reply.ok) {
-    const parsed = JSON.parse(reply.text) as PeersReply;
-    const list = parsed.peers ?? [];
-    for (const raw of list) {
-      const id = raw.id ?? '';
-      if (id.length === 0) {
-        continue;
-      }
-      peers.push({
-        id: id,
-        username: raw.username ?? '',
-        hostname: raw.hostname ?? '',
-        alias: raw.alias ?? '',
-        platform: raw.platform ?? '',
-        tags: raw.tags ?? []
-      });
+  const list = await fetchPaged<ServerPeer>(`${base}/api/ab/peers`, token, guid);
+  for (const raw of list) {
+    const id = raw.id ?? '';
+    if (id.length === 0) {
+      continue;
     }
+    // The name, OS and hostname all live in `info`; reading them from the top level yields a peer
+    // with an id and nothing else, which is what made an earlier version list 22 blank entries.
+    const info = raw.info;
+    peers.push({
+      id: id,
+      username: info?.username ?? '',
+      hostname: info?.device_name ?? '',
+      // No alias from the server: an alias is this device's own name for a peer, held locally.
+      alias: '',
+      platform: platformOf(info?.os),
+      tags: [],
+      loginName: raw.user_name ?? '',
+      device_group_name: raw.device_group_name ?? '',
+      note: raw.note ?? ''
+    });
   }
   return { guid: guid, name: name, tags: [], peers: peers };
+}
+
+/**
+ * The platform constant for the server's OS string.
+ *
+ * The server sends something like "Windows 11 / 10.0.22631", so the part before the separator is
+ * the platform. The set is the core's small enum rather than free text, because the UI matches on
+ * it to pick an icon; anything unrecognised is left empty rather than guessed at.
+ */
+function platformOf(os: string | undefined): string {
+  if (!os) {
+    return '';
+  }
+  const head = os.split(' / ')[0].toLowerCase();
+  if (head.startsWith('windows')) {
+    return 'Windows';
+  }
+  if (head.startsWith('macos') || head.startsWith('mac os')) {
+    return 'Mac OS';
+  }
+  if (head.startsWith('linux')) {
+    return 'Linux';
+  }
+  if (head.startsWith('android')) {
+    return 'Android';
+  }
+  if (head.startsWith('ios')) {
+    return 'iOS';
+  }
+  // The server sometimes sends a fuller string whose leading token is not the OS.
+  if (os.toLowerCase().includes('linux')) {
+    return 'Linux';
+  }
+  return '';
 }
 
 /**
@@ -348,8 +455,13 @@ async function loadBook(base: string, token: string, guid: string, name: string)
  *
  * Does not throw: an unreachable endpoint and a refused one are both ordinary here, and each
  * caller would otherwise repeat the same handling.
+ *
+ * `withBody` distinguishes the two kinds of endpoint. The personal-book call takes a POST with no
+ * parameters and expects an empty JSON object; the paged lists carry everything in the query string
+ * and are sent with no body at all, which is what the desktop client does.
  */
-async function post(url: string, token: string, payload?: Object): Promise<TextReply> {
+async function post(url: string, token: string, payload?: Object,
+                    withBody: boolean = true): Promise<TextReply> {
   const request = http.createHttp();
   try {
     const response = await request.request(url, {
@@ -362,7 +474,7 @@ async function post(url: string, token: string, payload?: Object): Promise<TextR
       },
       // Some endpoints take a POST with no parameters, which the server expects as an empty object
       // rather than an absent body.
-      extraData: JSON.stringify(payload ?? {}),
+      extraData: withBody ? JSON.stringify(payload ?? {}) : undefined,
       connectTimeout: 10000,
       readTimeout: 15000
     });
@@ -376,6 +488,16 @@ async function post(url: string, token: string, payload?: Object): Promise<TextR
     };
   } finally {
     request.destroy();
+  }
+}
+
+/** Reads a paged reply that has already been fetched, for the one endpoint not using fetchPaged. */
+function pageOf<T>(reply: TextReply, _kind: string): T[] {
+  try {
+    const parsed = JSON.parse(reply.text) as PagedReply<T>;
+    return parsed.data ?? [];
+  } catch (e) {
+    return [];
   }
 }
 
