@@ -1569,6 +1569,24 @@ pub fn ohos_next_rgba(session_id: &SessionID, display: usize) {
     }
 }
 
+/// The peer's display size for `display`, or (0, 0) before the peer has announced it.
+///
+/// The front end needs this to map a touch position on the surface to a position in the peer's
+/// coordinate space, which is the coordinate space mouse events are sent in.
+#[cfg(target_env = "ohos")]
+pub fn ohos_get_display_size(session_id: &SessionID, display: usize) -> (usize, usize) {
+    sessions::get_session_by_session_id(session_id)
+        .and_then(|session| {
+            session
+                .session_handlers
+                .read()
+                .unwrap()
+                .get(session_id)
+                .map(|h| h.renderer.get_size(display))
+        })
+        .unwrap_or((0, 0))
+}
+
 #[cfg(not(target_os = "ios"))]
 pub fn update_text_clipboard_required() {
     let is_required = sessions::get_sessions()

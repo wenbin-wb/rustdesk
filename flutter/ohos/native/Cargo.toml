@@ -33,5 +33,9 @@ uuid = { version = "1", features = ["v4"] }
 lazy_static = "1"
 log = "0.4"
 
+# Reading the display size out of the core's JSON reply. Already resolved at the workspace
+# version, so this pins rather than introduces a dependency.
+serde_json = "1.0"
+
 [build-dependencies]
 napi-build-ohos = "1"

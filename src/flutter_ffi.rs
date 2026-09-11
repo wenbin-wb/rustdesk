@@ -2333,6 +2333,19 @@ pub fn session_forget_ohos(session_id: SessionID) {
     super::flutter::ohos_forget_session(&session_id);
 }
 
+/// The peer's display size as `{"width":N,"height":N}`, or empty before it is known.
+///
+/// Needed to map a touch on the local surface into the peer's coordinate space, since that is
+/// what mouse events carry.
+#[cfg(target_env = "ohos")]
+pub fn session_get_display_size(session_id: SessionID, display: usize) -> String {
+    let (width, height) = super::flutter::ohos_get_display_size(&session_id, display);
+    if width == 0 || height == 0 {
+        return String::new();
+    }
+    serde_json::json!({ "width": width, "height": height }).to_string()
+}
+
 pub fn session_register_pixelbuffer_texture(
     session_id: SessionID,
     display: usize,

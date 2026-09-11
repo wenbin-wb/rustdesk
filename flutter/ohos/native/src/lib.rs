@@ -490,3 +490,87 @@ pub fn video_surface_detach() {
 pub fn video_is_attached() -> bool {
     surface::is_attached()
 }
+
+// --- input --------------------------------------------------------------------
+//
+// What the user's touch becomes on the peer. Position is in the peer's own coordinate space,
+// which is why the display size is exposed first: the caller scales a touch on the surface by
+// size / surfaceSize before sending it.
+
+/// The peer's display size, or null before the peer has announced it.
+#[napi(object)]
+pub struct DisplaySize {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Read the peer's display size for `display`.
+#[napi(js_name = "sessionGetDisplaySize")]
+pub fn session_get_display_size(session_id: String, display: u32) -> Option<DisplaySize> {
+    let session_id = parse_session(&session_id)?;
+    let raw = librustdesk::flutter_ffi::session_get_display_size(session_id, display as usize);
+    if raw.is_empty() {
+        return None;
+    }
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    Some(DisplaySize {
+        width: parsed["width"].as_u64().unwrap_or(0) as u32,
+        height: parsed["height"].as_u64().unwrap_or(0) as u32,
+    })
+}
+
+/// Send a mouse event. `msg` is the core's own JSON contract.
+///
+/// The shape the core expects, all values as strings:
+/// - move:    `{"type":"mousemove","x":"<px>","y":"<px>","buttons":"0"}`
+/// - button:  `{"type":"mousedown"|"mouseup","buttons":"left"|"right"|"wheel"}`
+/// - wheel:   `{"type":"wheel","y":"<ticks>"}`
+/// - relative: `{"type":"move_relative","x":"<dx>","y":"<dy>"}`
+///
+/// and any of `ctrl`, `shift`, `alt`, `command` set to `"true"` when that modifier is held.
+#[napi(js_name = "sessionSendMouse")]
+pub fn session_send_mouse(session_id: String, msg: String) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_send_mouse(session_id, msg);
+    }
+}
+
+/// Send a key event by name.
+///
+/// `name` is the core's key name (`"KeyA"`, `"Return"`, `"Shift"`, ...). `press` sends a
+/// complete press-and-release, which is what a soft keyboard should use; `down` alone is for
+/// physical keys that report their own releases.
+#[napi(js_name = "sessionInputKey")]
+pub fn session_input_key(
+    session_id: String,
+    name: String,
+    down: bool,
+    press: bool,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_input_key(
+            session_id, name, down, press, alt, ctrl, shift, command,
+        );
+    }
+}
+
+/// Send a run of text, for a soft keyboard or a paste.
+///
+/// Preferred over per-key events for typed text: it is a single message, and the core tells the
+/// peer the text rather than a sequence of keys, so it is not affected by the peer's layout.
+#[napi(js_name = "sessionInputString")]
+pub fn session_input_string(session_id: String, value: String) {
+    if let Some(session_id) = parse_session(&session_id) {
+        librustdesk::flutter_ffi::session_input_string(session_id, value);
+    }
+}
+
+// Note: the core also exports `session_enter_or_leave`, which tells the peer whether the pointer
+// is inside the remote view. It is deliberately not exposed. Its body on this platform is gated
+// out for mobile targets -- the same as android and ios -- so it would compile, be callable, and
+// do nothing, which is worse than not having it: the peer's cursor handling would look handled
+// while never being told anything.

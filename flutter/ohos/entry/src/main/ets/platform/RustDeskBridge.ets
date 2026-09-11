@@ -21,6 +21,12 @@ export interface RgbaFrame {
   data: ArrayBuffer;
 }
 
+/** The peer's display size, in the peer's own pixels. */
+export interface DisplaySize {
+  width: number;
+  height: number;
+}
+
 /** Shape of the module built from flutter/ohos/native/src/lib.rs. */
 interface RustDeskNative {
   // --- module identity -------------------------------------------------------
@@ -85,6 +91,14 @@ interface RustDeskNative {
   videoStop(): void;
   videoSurfaceDetach(): void;
   videoIsAttached(): boolean;
+  sessionGetDisplaySize(sessionId: string, display: number): DisplaySize | undefined;
+  sessionSendMouse(sessionId: string, msg: string): void;
+  sessionInputKey(
+    sessionId: string, name: string,
+    down: boolean, press: boolean,
+    alt: boolean, ctrl: boolean, shift: boolean, command: boolean
+  ): void;
+  sessionInputString(sessionId: string, value: string): void;
 
   // --- rendering -------------------------------------------------------------
   /** Next texture key to register an XComponent surface under. */
@@ -289,6 +303,29 @@ export function videoAttachAndStart(surfaceId: string, sessionId: string, displa
 /** Stop drawing and release the surface. */
 export function videoDetach(): void {
   native.videoSurfaceDetach();
+}
+
+// --- input --------------------------------------------------------------------
+
+/** The peer's display size, or undefined until the peer announces it. */
+export function getDisplaySize(sessionId: string, display: number): DisplaySize | undefined {
+  return native.sessionGetDisplaySize(sessionId, display);
+}
+
+/** Send a mouse message in the core's own JSON shape. Prefer RemoteInput, which builds them. */
+export function sendMouse(sessionId: string, msg: string): void {
+  native.sessionSendMouse(sessionId, msg);
+}
+
+/** Send a key event by the core's key name. */
+export function inputKey(sessionId: string, name: string, down: boolean, press: boolean,
+                         alt: boolean, ctrl: boolean, shift: boolean, command: boolean): void {
+  native.sessionInputKey(sessionId, name, down, press, alt, ctrl, shift, command);
+}
+
+/** Send a run of typed text, which does not depend on the peer's keyboard layout. */
+export function inputString(sessionId: string, value: string): void {
+  native.sessionInputString(sessionId, value);
 }
 
 /** Whether the given session is currently being recorded. */

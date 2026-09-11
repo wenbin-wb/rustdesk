@@ -87,6 +87,22 @@ export const videoStop: () => void;
 export const videoSurfaceDetach: () => void;
 export const videoIsAttached: () => boolean;
 
+// Input. Positions are in the peer's coordinate space, which is why the display size is exposed
+// first: a touch on the surface has to be scaled by displaySize / surfaceSize before it is sent.
+export interface DisplaySize {
+  width: number;
+  height: number;
+}
+
+export const sessionGetDisplaySize: (sessionId: string, display: number) => DisplaySize | undefined;
+export const sessionSendMouse: (sessionId: string, msg: string) => void;
+export const sessionInputKey: (
+  sessionId: string, name: string,
+  down: boolean, press: boolean,
+  alt: boolean, ctrl: boolean, shift: boolean, command: boolean
+) => void;
+export const sessionInputString: (sessionId: string, value: string) => void;
+
 // Rendering
 export const getNextTextureKey: () => number;
 
