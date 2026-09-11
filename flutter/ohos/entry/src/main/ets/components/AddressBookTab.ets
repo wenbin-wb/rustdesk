@@ -14,6 +14,15 @@ const ONLINE_POLL_MS = 15000;
 /** How often the queue is checked for the answer. Much shorter, since the answer is prompt. */
 const EVENT_POLL_MS = 500;
 
+/**
+ * The gap between device cards.
+ *
+ * Set on each ListItemGroup rather than on the List: `List({ space })` separates only the items
+ * sitting directly in the list, so with every device inside a group it had no effect at all and
+ * the cards rendered flush against each other as one continuous white block.
+ */
+const ROW_GAP = 12;
+
 /** One device, flattened from whichever source it came from. */
 interface PeerRow {
   id: string;
@@ -362,19 +371,26 @@ export struct AddressBookTab {
   /**
    * The list, one group per address book.
    *
-   * `ListItemGroup` gives the book headings. The spacing is generous on purpose: a row carries an
-   * icon, two lines of text, a status dot and a menu, and packing them together makes the whole
-   * list read as one block instead of as separate devices.
+   * `ListItemGroup` gives the book headings. The spacing that separates the cards is set on the
+   * GROUP, not on the List: `List({ space })` only separates items sitting directly in the list,
+   * so with every device inside a group it had no effect at all and the cards rendered flush
+   * against each other as one continuous white block.
    */
   @Builder
   private buildList() {
-    List({ space: 10 }) {
+    List() {
       ForEach(this.visibleGroups(), (group: PeerGroup) => {
-        ListItemGroup({ header: this.buildGroupHeader(group.name) }) {
+        ListItemGroup({ header: this.buildGroupHeader(group.name), space: ROW_GAP })
+          .backgroundColor(Color.Transparent)
+          .borderRadius($r('app.float.radius_control'))
+          .clip(false) {
           ForEach(group.peers, (peer: PeerRow) => {
             ListItem() {
               this.buildRow(peer)
             }
+            // Slide a row leftwards to reveal its actions, which is how the platform expects
+            // per-item actions to be offered and keeps them off the card itself.
+            .swipeAction({ end: this.buildSwipeActions(peer) })
           }, (peer: PeerRow) => peer.id)
         }
       }, (group: PeerGroup) => `${group.name}:${group.peers.length}`)
@@ -382,9 +398,39 @@ export struct AddressBookTab {
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
-    // The card look comes from the rows, so the list background stays clear and the rows read as
-    // separate objects rather than as one sheet.
+    // The cards carry their own background, so the list must not paint over the gaps between
+    // them -- a list background here is what turned the spacing invisible.
     .backgroundColor(Color.Transparent)
+  }
+
+  /** The actions revealed by sliding a row. */
+  @Builder
+  buildSwipeActions(peer: PeerRow) {
+    Row() {
+      this.buildSwipeButton('重命名', $r('app.color.brand'), () => {
+        this.openRename(peer);
+      })
+      this.buildSwipeButton('备注', $r('app.color.text_secondary'), () => {
+        this.openNote(peer);
+      })
+    }
+    .height('100%')
+  }
+
+  @Builder
+  buildSwipeButton(label: string, color: Resource, action: () => void) {
+    Text(label)
+      .fontSize($r('app.float.font_caption'))
+      .fontColor(Color.White)
+      .textAlign(TextAlign.Center)
+      .width(76)
+      .height('100%')
+      .backgroundColor(color)
+      .borderRadius($r('app.float.radius_control'))
+      .margin({ left: 6 })
+      .onClick(() => {
+        action();
+      })
   }
 
   @Builder
