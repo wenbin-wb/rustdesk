@@ -23,7 +23,7 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'rustdesk' + ('.exe' if windows else '')
+hbb_name = 'arasdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     win_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x64'
@@ -53,6 +53,34 @@ def system2(cmd):
     if exit_code != 0:
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
+
+
+def patch_arasdesk():
+    cfg_path = os.path.join(REPO_ROOT, 'libs', 'hbb_common', 'src', 'config.rs')
+    if not os.path.exists(cfg_path):
+        return
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    replacements = [
+        ('pub static ref APP_NAME: RwLock<String> = RwLock::new("RustDesk".to_owned());',
+         'pub static ref APP_NAME: RwLock<String> = RwLock::new("ArasDesk".to_owned());'),
+        ('pub static ref PROD_RENDEZVOUS_SERVER: RwLock<String> = RwLock::new("".to_owned());',
+         'pub static ref PROD_RENDEZVOUS_SERVER: RwLock<String> = RwLock::new("39.108.142.143".to_owned());'),
+        ('pub static ref DEFAULT_SETTINGS: RwLock<HashMap<String, String>> = Default::default();',
+         'pub static ref DEFAULT_SETTINGS: RwLock<HashMap<String, String>> = RwLock::new(HashMap::from([\n        ("custom-rendezvous-server".to_owned(), "39.108.142.143:21116".to_owned()),\n        ("relay-server".to_owned(), "39.108.142.143:21117".to_owned()),\n        ("api-server".to_owned(), "http://39.108.142.143:21114".to_owned()),\n        ("key".to_owned(), "9ZQTlFLtBG4IyZFjf+p0uuvCkGTlcaYHObHT26hYlt8=".to_owned()),\n    ]));'),
+        ('&["rs-ny.rustdesk.com"]',
+         '&["39.108.142.143"]'),
+        ('"OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="',
+         '"9ZQTlFLtBG4IyZFjf+p0uuvCkGTlcaYHObHT26hYlt8="'),
+    ]
+
+    for old, new in replacements:
+        content = content.replace(old, new)
+
+    with open(cfg_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Patched libs/hbb_common/src/config.rs for ArasDesk.")
 
 
 def get_version():
@@ -942,19 +970,19 @@ def build_flutter_windows(version, features, skip_portable_pack):
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/arasdesk.exe')
     os.chdir('../..')
-    if os.path.exists('./rustdesk_portable.exe'):
+    if os.path.exists('./arasdesk_portable.exe'):
         os.replace('./target/release/rustdesk-portable-packer.exe',
-                   './rustdesk_portable.exe')
+                   './arasdesk_portable.exe')
     else:
         os.rename('./target/release/rustdesk-portable-packer.exe',
-                  './rustdesk_portable.exe')
+                  './arasdesk_portable.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/arasdesk_portable.exe')
+    os.rename('./arasdesk_portable.exe', f'./arasdesk-{version}-install.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/arasdesk-{version}-install.exe')
 
 
 def main():
@@ -974,6 +1002,8 @@ def main():
             feats = ','.join(get_features(args))
         print(feats)
         return
+
+    patch_arasdesk()
 
     if os.path.exists(exe_path):
         os.unlink(exe_path)

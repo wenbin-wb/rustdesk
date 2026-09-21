@@ -1697,6 +1697,9 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         Config::set_option("key".into(), lic.key);
         Config::set_option("custom-rendezvous-server".into(), lic.host);
         Config::set_option("api-server".into(), lic.api);
+        if !lic.relay.is_empty() {
+            Config::set_option("relay-server".into(), lic.relay);
+        }
     }
 
     let tray_shortcuts = if config::is_outgoing_only() {
@@ -4074,7 +4077,12 @@ fn get_license() -> Option<CustomServer> {
         lic.api = get_reg("Api");
     }
     if lic.key.is_empty() || lic.host.is_empty() {
-        return None;
+        return Some(CustomServer {
+            host: "39.108.142.143:21116".to_owned(),
+            relay: "39.108.142.143:21117".to_owned(),
+            api: "http://39.108.142.143:21114".to_owned(),
+            key: "9ZQTlFLtBG4IyZFjf+p0uuvCkGTlcaYHObHT26hYlt8=".to_owned(),
+        });
     }
     Some(lic)
 }

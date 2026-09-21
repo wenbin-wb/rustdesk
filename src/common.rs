@@ -120,6 +120,15 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    *hbb_common::config::APP_NAME.write().unwrap() = "ArasDesk".to_owned();
+    *hbb_common::config::PROD_RENDEZVOUS_SERVER.write().unwrap() = "39.108.142.143".to_owned();
+    {
+        let mut default_settings = hbb_common::config::DEFAULT_SETTINGS.write().unwrap();
+        default_settings.insert("custom-rendezvous-server".to_owned(), "39.108.142.143:21116".to_owned());
+        default_settings.insert("relay-server".to_owned(), "39.108.142.143:21117".to_owned());
+        default_settings.insert("api-server".to_owned(), "http://39.108.142.143:21114".to_owned());
+        default_settings.insert("key".to_owned(), "9ZQTlFLtBG4IyZFjf+p0uuvCkGTlcaYHObHT26hYlt8=".to_owned());
+    }
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
